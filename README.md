@@ -115,23 +115,20 @@ python apps/trajectory_viewer.py --port 5050
 ## Architecture
 
 ```
-User Query + Images
-        │
-        ▼
-┌──────────────────┐
-│  VLMToolCallAgent │  ← Agentic loop with OpenAI function calling
-│                    │
-│  1. Send to LLM   │
-│  2. Parse tool     │──▶  execute_code  ──▶  JupyterNotebookKernel
-│     calls          │                        (Docker container)
-│  3. Feed results   │◀── text + images ◀──
-│     back to LLM    │
-│  4. Repeat until   │
-│     finish()       │
-└──────────────────┘
-        │
-        ▼
-  Final Answer + Trajectory
+                                User Query (+ images)
+                                        │
+                                        ▼
+                                ┌──────────────────────┐
+                                │   LLM (e.g. GPT-5.2) │◄───────────────────────┐
+                                │                      │                        │
+                                │   Tool Calls:        │                        │
+                                │   ┌────────────────┐ │     ┌──────────────┐   │
+                                │   │  execute_code  │─┼────►│Jupyter Kernel│   │
+                                │   └────────────────┘ │     │  (Docker)    │   │
+                                │   ┌────────────────┐ │     └──────┬───────┘   │
+                                │   │    finish      │─┼──► Answer  │ (Output)  │
+                                │   └────────────────┘ │            │           │
+                                └──────────────────────┘    text + images ──────┘
 ```
 
 **Key components:**
