@@ -24,3 +24,9 @@ Thumbs.db
 
 # Environment & secrets
 .env
+
+# Local generated artifacts
+.cache/
+logs/
+trajectories/
+workspaces/

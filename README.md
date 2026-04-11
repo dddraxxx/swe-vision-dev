@@ -14,7 +14,9 @@
 
 </div>
 
-An agentic VLM (Vision Language Model) framework that gives a language model access to a **stateful Jupyter notebook running inside a Docker container**. The agent can iteratively write and execute Python code to process images, run computations, and produce visualizations — all within a sandboxed environment.
+An agentic VLM (Vision Language Model) framework that gives a language model access to a **stateful notebook runtime**. The agent can iteratively write and execute Python code to process images, run computations, and produce visualizations. This local fork supports a safer `local_sandbox` mode by default, a plain `local` kernel for debugging, and optional Docker or Podman container runtimes when available.
+
+`local_sandbox` is safer than plain local execution, but it is **not** equivalent to Docker. It uses `setpriv + unshare` for reduced privileges and user/pid/mount namespace isolation.
 
 ## Project Structure
 
@@ -23,7 +25,7 @@ SWE-Vision/
 ├── swe_vision/                  # Core library
 │   ├── __init__.py              # Package exports
 │   ├── config.py                # Constants, logging, tool definitions, system prompt
-│   ├── kernel.py                # JupyterNotebookKernel — Docker-based Jupyter runtime
+│   ├── kernel.py                # JupyterNotebookKernel — local, docker, podman runtimes
 │   ├── image_utils.py           # Image encoding, MIME detection, OpenAI content parts
 │   ├── file_manager.py          # NotebookFileManager — host ↔ container file sharing
 │   ├── trajectory.py            # TrajectoryRecorder — saves full agent traces to disk
@@ -54,14 +56,103 @@ pip install -r requirements.txt
 export OPENAI_API_KEY="sk-..."
 export OPENAI_BASE_URL="https://openrouter.ai/api/v1"   # custom API endpoint
 export OPENAI_MODEL="openai/gpt-5.2"                          # default model
+export VLM_RUNTIME="local_sandbox"                            # default / recommended here
+export VLM_ATTACH_IMAGES_TO_LLM="true"                        # set false for text-only host models
+export OPENAI_REASONING_BACKEND="auto"                        # auto/openai/qwen3
 ```
 
-### 3. Prepare the Docker environment
+### 3. Prepare the runtime
 
-The agent runs code inside a Docker container. Make sure Docker is installed and running, then place a `Dockerfile` in the `env/` directory. A minimal example:
+Recommended in this environment: use the local sandboxed kernel.
 
 ```bash
+export VLM_RUNTIME="local_sandbox"
+```
+
+Debugging option: use the plain local kernel.
+
+```bash
+export VLM_RUNTIME="local"
+```
+
+Optional: if you have Docker available, you can still use the original container runtime:
+
+```bash
+export VLM_RUNTIME="docker"
 docker build -t swe-vision -f ./env/Dockerfile ./env
+```
+
+Optional: if you have Podman available on this host, you can use the Podman runtime:
+
+```bash
+export VLM_RUNTIME="podman"
+sudo podman build --isolation=chroot -t swe-vision ./env
+```
+
+On this machine, Podman requires `crun` and disabled cgroups, so the runtime uses:
+`--runtime=crun --cgroups=disabled --network=host`.
+
+### CharXiv sample workspace
+
+To stage one official CharXiv validation reasoning example locally:
+
+```bash
+.venv/bin/python scripts/setup_charxiv_reasoning.py
+```
+
+This creates `workspaces/charxiv_reasoning/` with:
+- `sample.json`
+- `sample.jsonl`
+- `prompt.txt`
+- `answer.txt`
+- the chart image for that question
+
+To enter the same Podman/IPython environment the model-facing runtime uses:
+
+```bash
+scripts/podman_ipython.sh workspaces/charxiv_reasoning
+```
+
+### Qwen3.5 + vLLM setup
+
+For a dedicated local host-model setup with Qwen3.5 and vLLM, use the bundled launch scripts:
+
+```bash
+cd /mnt/localssd/swe-vision
+chmod +x scripts/launch_qwen35_vllm_mm.sh scripts/start_qwen35_vllm_tmux.sh
+scripts/start_qwen35_vllm_tmux.sh
+```
+
+This launches:
+- `Qwen/Qwen3.5-397B-A17B-FP8`
+- OpenAI-compatible API on `http://127.0.0.1:8000/v1`
+- Qwen-specific reasoning parser: `qwen3`
+- Qwen tool-calling parser: `qwen3_coder`
+- multimodal vLLM options: `--mm-encoder-tp-mode data` and `--mm-processor-cache-type shm`
+
+Use these client-side environment variables with SWE-Vision:
+
+```bash
+export OPENAI_API_KEY=EMPTY
+export OPENAI_BASE_URL=http://127.0.0.1:8000/v1
+export OPENAI_MODEL=Qwen/Qwen3.5-397B-A17B-FP8
+export OPENAI_REASONING_BACKEND=qwen3
+export VLM_ATTACH_IMAGES_TO_LLM=true
+export VLM_RUNTIME=podman
+```
+
+Then run the CharXiv sample:
+
+```bash
+bash run.sh workspaces/charxiv_reasoning/figure_0000.jpg "$(cat workspaces/charxiv_reasoning/prompt.txt)"
+```
+
+Useful checks:
+
+```bash
+curl http://127.0.0.1:8000/v1/models
+tail -f logs/qwen35_host_vllm.log
+tmux attach -t swevision-qwen35
 ```
 
 
@@ -95,7 +186,29 @@ python apps/web_app.py --port 8080
 
 ![Web App Screenshot](./assets/web_app_screenshot.png)
 
-### 6. View trajectories
+### 6. Run batch evaluation
+
+Prepare a JSONL file with fields:
+- `id`
+- `question`
+- `answer`
+- `image` or `images`
+
+Example:
+
+```json
+{"id":"sample-chart-gap","question":"What is the performance gap between GPT5.2 and 6-year-olds from the chart? Answer with a number only.","answer":"46","image":"assets/test_image.png"}
+```
+
+Run:
+
+```bash
+cd /mnt/localssd/swe-vision
+source .venv/bin/activate
+python scripts/eval_jsonl.py --input eval_examples/test_image_eval.jsonl --output-dir eval_runs/sample
+```
+
+### 7. View trajectories
 
 Every agent run saves a trajectory (JSON + images) to `./trajectories/`. Browse them with the viewer:
 
@@ -167,6 +280,7 @@ usage: python -m swe_vision.cli [-h] [--image IMAGE] [--interactive]
 | `OPENAI_API_KEY` | API key for the LLM provider | *(required)* |
 | `OPENAI_BASE_URL` | Custom API base URL | OpenAI default |
 | `OPENAI_MODEL` | Default model name | `gpt-4o` |
+| `VLM_RUNTIME` | Runtime backend: `local_sandbox`, `local`, or `docker` | `local_sandbox` |
 | `VLM_DOCKER_IMAGE` | Docker image name for the kernel | `swe-vision:latest` |
 | `VLM_DOCKERFILE_DIR` | Path to the Dockerfile directory | `./env/` |
 | `VLM_HOST_WORK_DIR` | Host-side working directory for file sharing | `~/tmp/vlm_docker_workdir` |

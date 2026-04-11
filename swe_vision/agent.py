@@ -17,8 +17,10 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 
 from swe_vision.config import (
+    ATTACH_IMAGES_TO_LLM,
     DEFAULT_MODEL,
     MAX_ITERATIONS,
+    REASONING_BACKEND,
     SYSTEM_PROMPT,
     TOOLS,
     logger,
@@ -84,6 +86,7 @@ class VLMToolCallAgent:
             self.file_manager.setup_work_dir(
                 host_work_dir=self.kernel.host_work_dir,
                 container_work_dir=self.kernel.container_work_dir,
+                kernel=self.kernel,
             )
 
     def _log(self, msg: str, *args, level: str = "info"):
@@ -109,7 +112,8 @@ class VLMToolCallAgent:
                 if not os.path.exists(img_path):
                     self._log("Warning: image not found: %s", img_path, level="warning")
                     continue
-                content.append(make_image_content_part(img_path))
+                if ATTACH_IMAGES_TO_LLM:
+                    content.append(make_image_content_part(img_path))
                 dest_name = None
                 if has_collision or len(image_paths) > 1:
                     base = os.path.basename(img_path)
@@ -135,11 +139,22 @@ class VLMToolCallAgent:
             tools=TOOLS,
             tool_choice="auto",
         )
+        reasoning_backend = REASONING_BACKEND
+        if reasoning_backend == "auto":
+            model_lower = (self.model or "").lower()
+            reasoning_backend = "qwen3" if "qwen3" in model_lower else "openai"
+
         if self.reasoning:
-            kwargs["extra_body"] = {"reasoning": {"enabled": True, 'effort': 'xhigh'}}
-            kwargs["reasoning_effort"] = 'xhigh'
+            if reasoning_backend == "qwen3":
+                kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": True}}
+            else:
+                kwargs["extra_body"] = {"reasoning": {"enabled": True, "effort": "xhigh"}}
+                kwargs["reasoning_effort"] = "xhigh"
         else:
-            kwargs["extra_body"] = {"reasoning": {"enabled": False, 'effort': 'minimal'}}
+            if reasoning_backend == "qwen3":
+                kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+            else:
+                kwargs["extra_body"] = {"reasoning": {"enabled": False, "effort": "minimal"}}
 
         response = self.client.chat.completions.create(**kwargs)
         return response

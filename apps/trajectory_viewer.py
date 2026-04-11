@@ -14,7 +14,7 @@ import json
 import os
 import sys
 
-from flask import Flask, Response, abort, redirect, render_template_string, send_file, url_for
+from flask import Flask, Response, abort, redirect, render_template_string, request, send_file, url_for
 
 app = Flask(__name__)
 
@@ -186,6 +186,7 @@ VIEW_TEMPLATE = r"""
   .step.role-user::before { border-color: var(--accent); background: var(--accent); }
   .step.role-assistant::before { border-color: var(--purple); background: var(--purple); }
   .step.role-tool::before { border-color: var(--green); background: var(--green); }
+  .step.role-system::before { border-color: var(--orange); background: var(--orange); }
 
   .step-header {
     padding: 10px 16px; display: flex; justify-content: space-between;
@@ -205,6 +206,7 @@ VIEW_TEMPLATE = r"""
   .role-user .role-badge { background: rgba(88,166,255,0.15); color: var(--accent); }
   .role-assistant .role-badge { background: rgba(188,140,255,0.15); color: var(--purple); }
   .role-tool .role-badge { background: rgba(63,185,80,0.15); color: var(--green); }
+  .role-system .role-badge { background: rgba(240,136,62,0.15); color: var(--orange); }
   .step-header .time { font-size: 11px; color: var(--text-muted); }
   .step-header .preview {
     font-size: 12px; color: var(--text-muted); margin-left: 12px;
@@ -256,10 +258,13 @@ VIEW_TEMPLATE = r"""
   .image-gallery img {
     max-width: 100%; max-height: 400px; border-radius: 8px;
     border: 1px solid var(--border); cursor: pointer;
-    transition: transform 0.15s;
+    transition: transform 0.15s; display: block;
   }
   .image-gallery img:hover { transform: scale(1.02); }
   .image-gallery .single img { max-width: 100%; }
+  .image-link {
+    display: inline-block; margin-top: 6px; font-size: 12px;
+  }
 
   /* Lightbox */
   .lightbox {
@@ -276,6 +281,22 @@ VIEW_TEMPLATE = r"""
   }
 
   .error-text { color: var(--red); }
+  .mode-switch {
+    display: flex; gap: 8px; margin: 14px 0 0;
+  }
+  .mode-link {
+    display: inline-block; padding: 6px 10px; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--text-muted); font-size: 12px;
+    font-weight: 600;
+  }
+  .mode-link.active {
+    color: var(--text); border-color: var(--accent); background: rgba(88,166,255,0.1);
+  }
+  .raw-json-block {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; margin: 10px 0; overflow-x: auto;
+  }
+  .raw-json-block pre { white-space: pre-wrap; word-break: break-word; color: var(--text); }
 
   /* Reasoning / Thinking block */
   .reasoning-block {
@@ -301,6 +322,10 @@ VIEW_TEMPLATE = r"""
   <div class="header">
     <a href="/" class="back">← All Trajectories</a>
     <h1>{{ meta.get('query', 'Trajectory') }}</h1>
+    <div class="mode-switch">
+      <a class="mode-link {% if not raw_mode %}active{% endif %}" href="/view/{{ run_name }}">Trajectory</a>
+      <a class="mode-link {% if raw_mode %}active{% endif %}" href="/view/{{ run_name }}?mode=raw">Raw</a>
+    </div>
     {% if final_answer %}
     <div class="final-answer">
       <div class="label">✓ Final Answer</div>
@@ -368,9 +393,21 @@ VIEW_TEMPLATE = r"""
       </div>
       <div class="step-body">
 
-        {# ─── User content ─── #}
-        {% if step.role == 'user' and step.content_text %}
-          <div class="section-label">Query</div>
+        {# ─── Primary text content ─── #}
+        {% if step.content_text %}
+          <div class="section-label">
+            {% if raw_mode %}
+              Message Content
+            {% elif step.role == 'user' %}
+              Query
+            {% elif step.role == 'assistant' %}
+              Response
+            {% elif step.role == 'system' %}
+              System Prompt
+            {% else %}
+              Output
+            {% endif %}
+          </div>
           <div class="content-text">{{ step.content_text }}</div>
         {% endif %}
 
@@ -379,7 +416,10 @@ VIEW_TEMPLATE = r"""
           <div class="section-label">Images</div>
           <div class="image-gallery {% if step.images|length == 1 %}single{% endif %}">
             {% for img in step.images %}
-              <img src="/image/{{ run_name }}/{{ img }}" alt="{{ img }}" onclick="openLightbox(this.src)" loading="lazy">
+              <div>
+                <img src="/image/{{ run_name }}/{{ img }}" alt="{{ img }}" onclick="openLightbox(this.src)">
+                <a class="image-link" href="/image/{{ run_name }}/{{ img }}" target="_blank" rel="noopener">Open image</a>
+              </div>
             {% endfor %}
           </div>
         {% endif %}
@@ -405,12 +445,6 @@ VIEW_TEMPLATE = r"""
               </div>
             {% endif %}
           {% endfor %}
-        {% endif %}
-
-        {# ─── Assistant text ─── #}
-        {% if step.role == 'assistant' and step.content_text %}
-          <div class="section-label">Response</div>
-          <div class="content-text">{{ step.content_text }}</div>
         {% endif %}
 
         {# ─── Tool calls ─── #}
@@ -455,6 +489,13 @@ VIEW_TEMPLATE = r"""
         {% if step.role == 'tool' and step.content_text %}
           <div class="section-label">Output</div>
           <div class="content-text {% if '[ERROR]' in (step.content_text or '') or '[Execution Error]' in (step.content_text or '') %}error-text{% endif %}">{{ step.content_text }}</div>
+        {% endif %}
+
+        {% if raw_mode and step.raw_json %}
+          <div class="section-label">Raw Message JSON</div>
+          <div class="raw-json-block">
+            <pre>{{ step.raw_json }}</pre>
+          </div>
         {% endif %}
 
       </div>
@@ -634,6 +675,59 @@ def convert_raw_to_steps(messages: list) -> tuple:
     return meta, steps, final_answer
 
 
+def raw_messages_to_steps(messages: list) -> tuple:
+    """Preserve the saved message sequence as directly as possible for raw inspection."""
+    steps = []
+    final_answer = None
+    first_user_text = None
+
+    for idx, msg in enumerate(messages):
+        role = msg.get("role", "unknown")
+        content_text, images = _extract_content(msg.get("content"))
+        reasoning, reasoning_details = _extract_reasoning(msg)
+
+        tool_calls = []
+        for tc in msg.get("tool_calls") or []:
+            fn = tc.get("function", {})
+            tool_calls.append({
+                "id": tc.get("id", ""),
+                "name": fn.get("name", ""),
+                "arguments": fn.get("arguments", ""),
+            })
+            if fn.get("name") == "finish":
+                args = parse_tool_args(fn.get("arguments", ""))
+                if args.get("answer"):
+                    final_answer = args["answer"]
+
+        if role == "user" and first_user_text is None:
+            first_user_text = content_text
+
+        steps.append({
+            "step": idx,
+            "role": role,
+            "timestamp": "",
+            "content_text": content_text,
+            "tool_calls": tool_calls or None,
+            "tool_call_id": msg.get("tool_call_id"),
+            "code": None,
+            "images": images,
+            "reasoning": reasoning,
+            "reasoning_details": reasoning_details,
+            "raw_json": json.dumps(msg, ensure_ascii=False, indent=2),
+        })
+
+    meta = {
+        "query": first_user_text or "(no query)",
+        "model": "—",
+        "total_steps": len(steps),
+        "start_time": "—",
+        "end_time": "—",
+        "max_iterations": "—",
+        "system_prompt": steps[0]["content_text"] if steps and steps[0]["role"] == "system" else "",
+    }
+    return meta, steps, final_answer
+
+
 def count_images(traj_dir: str) -> int:
     img_dir = os.path.join(traj_dir, "images")
     if not os.path.isdir(img_dir):
@@ -696,14 +790,28 @@ def view_trajectory(run_name: str):
     if fmt == "none":
         abort(404, f"Trajectory not found: {run_name}")
 
+    raw_mode = request.args.get("mode") == "raw"
+
     if fmt == "trajectory":
-        data = load_trajectory(traj_dir)
-        meta = data.get("metadata", {})
-        steps = data.get("steps", [])
-        final_answer = data.get("final_answer")
+        if raw_mode and os.path.isfile(os.path.join(traj_dir, "messages_raw.json")):
+            messages = load_raw_messages(traj_dir)
+            meta, steps, final_answer = raw_messages_to_steps(messages)
+            data = load_trajectory(traj_dir)
+            meta["model"] = data.get("metadata", {}).get("model", meta.get("model", "—"))
+            meta["start_time"] = data.get("metadata", {}).get("start_time", meta.get("start_time", "—"))
+            meta["end_time"] = data.get("metadata", {}).get("end_time", meta.get("end_time", "—"))
+            meta["max_iterations"] = data.get("metadata", {}).get("max_iterations", meta.get("max_iterations", "—"))
+        else:
+            data = load_trajectory(traj_dir)
+            meta = data.get("metadata", {})
+            steps = data.get("steps", [])
+            final_answer = data.get("final_answer")
     else:
         messages = load_raw_messages(traj_dir)
-        meta, steps, final_answer = convert_raw_to_steps(messages)
+        if raw_mode:
+            meta, steps, final_answer = raw_messages_to_steps(messages)
+        else:
+            meta, steps, final_answer = convert_raw_to_steps(messages)
 
     img_count = count_images(traj_dir)
 
@@ -715,6 +823,7 @@ def view_trajectory(run_name: str):
         run_name=run_name,
         image_count=img_count,
         parse_args=parse_tool_args,
+        raw_mode=raw_mode,
     )
 
 

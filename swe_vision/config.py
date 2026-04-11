@@ -22,6 +22,12 @@ DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 MAX_ITERATIONS = 100
 CELL_TIMEOUT = 120.0
 MAX_OUTPUT_CHARS = 50000
+ATTACH_IMAGES_TO_LLM = os.environ.get("VLM_ATTACH_IMAGES_TO_LLM", "true").lower() not in {"0", "false", "no"}
+REASONING_BACKEND = os.environ.get("OPENAI_REASONING_BACKEND", "auto").lower()
+RUNTIME = os.environ.get(
+    "VLM_RUNTIME",
+    "local_sandbox",
+).lower()
 
 # Container-side working directory (visible to the kernel)
 CONTAINER_WORK_DIR = "/mnt/data"
@@ -44,7 +50,6 @@ DOCKERFILE_DIR = os.environ.get(
     "VLM_DOCKERFILE_DIR",
     os.path.join(_PROJECT_ROOT, "env"),
 )
-
 # Pre-assigned ZMQ ports for the Jupyter kernel inside the container
 _KERNEL_BASE_PORT = 65500
 KERNEL_PORTS = {
@@ -64,15 +69,15 @@ TOOLS = [
         "function": {
             "name": "execute_code",
             "description": (
-                "Execute Python code in a **stateful** Jupyter notebook environment. "
+                "Execute Python code in a **stateful** notebook environment. "
                 "The kernel persists across calls, so variables, imports, and state are retained. "
                 "Use this to process images, perform calculations, create visualizations, "
                 "or run any Python code. "
                 "Any images generated (e.g. via matplotlib plt.show() or PIL Image.save()) "
                 "will be captured and returned as base64-encoded images."
                 "Print statements and expression results are captured as text output. "
-                "All uploaded files are available under /mnt/data/. "
-                "The kernel's working directory is /mnt/data/."
+                "All uploaded files are available in the runtime working directory. "
+                "The exact file paths will be provided in the conversation."
             ),
             "parameters": {
                 "type": "object",
@@ -117,12 +122,12 @@ TOOLS = [
 # System Prompt
 # ─────────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """\
-You are an expert AI assistant with access to a **stateful Jupyter notebook** environment. \
+You are an expert AI assistant with access to a **stateful notebook** environment. \
 You can execute Python code to help answer the user's questions.
 
 ## Available Tools
 
-1. **execute_code**: Run Python code in a persistent Jupyter notebook. The kernel state \
+1. **execute_code**: Run Python code in a persistent notebook. The kernel state \
 (variables, imports, loaded data) is preserved between calls. Use this for:
    - Image processing and analysis (PIL/Pillow, OpenCV, skimage, etc.)
    - Data analysis and computation (numpy, pandas, scipy, etc.)
@@ -133,16 +138,14 @@ You can execute Python code to help answer the user's questions.
 
 ## File System
 
-- All uploaded files (images, data files, etc.) are placed in `/mnt/data/`.
-- The Jupyter kernel's working directory is `/mnt/data/`, so you can reference files \
-by their filename directly (e.g. `open('image.png')`) or by absolute path \
-(e.g. `open('/mnt/data/image.png')`).
-- Any files you create or save will also go into `/mnt/data/`.
+- Uploaded files are placed in the runtime working directory.
+- The exact file paths for uploaded files will be provided to you in the conversation.
+- Any files you create or save should be written under the runtime working directory.
 
 ## Guidelines
 
 - When given an image, you can load it in the notebook using PIL or OpenCV. \
-The image file will be available at `/mnt/data/<filename>`.
+The image file path will be provided to you.
 - You can call execute_code **multiple times** to iteratively explore and process data.
 - Always use print() to output results you want to see.
 - When you generate plots with matplotlib, use plt.show() — the plot image will be \

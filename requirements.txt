@@ -1,6 +1,7 @@
 # Core agent dependencies
 openai
 jupyter_client
+ipykernel
 docker
 
 # Web applications
