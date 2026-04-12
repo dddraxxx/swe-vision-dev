@@ -19,7 +19,7 @@ logger = logging.getLogger("vlm_agent")
 # Constants
 # ─────────────────────────────────────────────────────────────────────
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
-MAX_ITERATIONS = 100
+MAX_ITERATIONS = int(os.environ.get("VLM_MAX_ITERATIONS", "50"))
 CELL_TIMEOUT = 120.0
 MAX_OUTPUT_CHARS = 50000
 ATTACH_IMAGES_TO_LLM = os.environ.get("VLM_ATTACH_IMAGES_TO_LLM", "true").lower() not in {"0", "false", "no"}

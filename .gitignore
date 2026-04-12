@@ -30,3 +30,4 @@ Thumbs.db
 logs/
 trajectories/
 workspaces/
+eval_runs/

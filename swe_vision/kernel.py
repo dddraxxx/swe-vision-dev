@@ -14,6 +14,7 @@ import os
 import queue
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -68,6 +69,7 @@ class JupyterNotebookKernel:
         self._started = False
 
         self._kernel_key = uuid.uuid4().hex
+        self._kernel_ports = self._allocate_kernel_ports()
 
     @property
     def host_work_dir(self) -> str:
@@ -109,13 +111,34 @@ class JupyterNotebookKernel:
                     logger.debug("  [docker build] %s", line)
         logger.info("Docker image '%s' built successfully.", self._docker_image)
 
+    @staticmethod
+    def _allocate_kernel_ports() -> Dict[str, int]:
+        ports: Dict[str, int] = {}
+        sockets: List[socket.socket] = []
+        try:
+            for name in (
+                "shell_port",
+                "iopub_port",
+                "stdin_port",
+                "control_port",
+                "hb_port",
+            ):
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.bind(("127.0.0.1", 0))
+                ports[name] = sock.getsockname()[1]
+                sockets.append(sock)
+        finally:
+            for sock in sockets:
+                sock.close()
+        return ports
+
     def _write_connection_file(self) -> str:
         conn = {
-            "shell_port": KERNEL_PORTS["shell_port"],
-            "iopub_port": KERNEL_PORTS["iopub_port"],
-            "stdin_port": KERNEL_PORTS["stdin_port"],
-            "control_port": KERNEL_PORTS["control_port"],
-            "hb_port": KERNEL_PORTS["hb_port"],
+            "shell_port": self._kernel_ports["shell_port"],
+            "iopub_port": self._kernel_ports["iopub_port"],
+            "stdin_port": self._kernel_ports["stdin_port"],
+            "control_port": self._kernel_ports["control_port"],
+            "hb_port": self._kernel_ports["hb_port"],
             "ip": "0.0.0.0",
             "key": self._kernel_key,
             "transport": "tcp",
@@ -134,7 +157,7 @@ class JupyterNotebookKernel:
         if self._docker_client is None:
             self._docker_client = docker.from_env()
 
-        port_bindings = {f"{port}/tcp": ("127.0.0.1", port) for port in KERNEL_PORTS.values()}
+        port_bindings = {f"{port}/tcp": ("127.0.0.1", port) for port in self._kernel_ports.values()}
         container_name = f"vlm-jupyter-{uuid.uuid4().hex[:8]}"
 
         logger.info(
@@ -177,14 +200,14 @@ class JupyterNotebookKernel:
 
         self._kc = BlockingKernelClient()
         self._kc.ip = "127.0.0.1"
-        self._kc.shell_port = KERNEL_PORTS["shell_port"]
-        self._kc.iopub_port = KERNEL_PORTS["iopub_port"]
-        self._kc.stdin_port = KERNEL_PORTS["stdin_port"]
-        self._kc.control_port = KERNEL_PORTS["control_port"]
-        self._kc.hb_port = KERNEL_PORTS["hb_port"]
+        self._kc.shell_port = self._kernel_ports["shell_port"]
+        self._kc.iopub_port = self._kernel_ports["iopub_port"]
+        self._kc.stdin_port = self._kernel_ports["stdin_port"]
+        self._kc.control_port = self._kernel_ports["control_port"]
+        self._kc.hb_port = self._kernel_ports["hb_port"]
         self._kc.session.key = self._kernel_key.encode("utf-8")
         self._kc.start_channels()
-        logger.info("Kernel client connected to 127.0.0.1 ports %s", list(KERNEL_PORTS.values()))
+        logger.info("Kernel client connected to 127.0.0.1 ports %s", list(self._kernel_ports.values()))
 
     # Podman helpers
 

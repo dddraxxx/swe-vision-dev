@@ -78,6 +78,28 @@ class VLMToolCallAgent:
 
         self.trajectory: Optional[TrajectoryRecorder] = None
 
+    def _resolve_reasoning_backend(self) -> str:
+        reasoning_backend = REASONING_BACKEND
+        if reasoning_backend == "auto":
+            model_lower = (self.model or "").lower()
+            if "qwen3" in model_lower:
+                return "qwen3"
+            if "gemma-4" in model_lower:
+                return "gemma4"
+            return "openai"
+        return reasoning_backend
+
+    def _build_tool_image_followup(self, image_parts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        text = (
+            "Notebook-generated observation image(s) from the previous "
+            "`execute_code` tool call. Treat these as outputs from your tool use, "
+            "not as a new user request."
+        )
+        return {
+            "role": "user",
+            "content": [{"type": "text", "text": text}] + image_parts,
+        }
+
     async def _ensure_kernel(self):
         if self.kernel is None:
             self.kernel = JupyterNotebookKernel()
@@ -139,19 +161,26 @@ class VLMToolCallAgent:
             tools=TOOLS,
             tool_choice="auto",
         )
-        reasoning_backend = REASONING_BACKEND
-        if reasoning_backend == "auto":
-            model_lower = (self.model or "").lower()
-            reasoning_backend = "qwen3" if "qwen3" in model_lower else "openai"
+        reasoning_backend = self._resolve_reasoning_backend()
 
         if self.reasoning:
-            if reasoning_backend == "qwen3":
+            if reasoning_backend == "gemma4":
+                kwargs["extra_body"] = {
+                    "chat_template_kwargs": {"enable_thinking": True},
+                    "reasoning": {"enabled": True, "effort": "xhigh"},
+                }
+            elif reasoning_backend == "qwen3":
                 kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": True}}
             else:
                 kwargs["extra_body"] = {"reasoning": {"enabled": True, "effort": "xhigh"}}
                 kwargs["reasoning_effort"] = "xhigh"
         else:
-            if reasoning_backend == "qwen3":
+            if reasoning_backend == "gemma4":
+                kwargs["extra_body"] = {
+                    "chat_template_kwargs": {"enable_thinking": False},
+                    "reasoning": {"enabled": False, "effort": "minimal"},
+                }
+            elif reasoning_backend == "qwen3":
                 kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
             else:
                 kwargs["extra_body"] = {"reasoning": {"enabled": False, "effort": "minimal"}}
@@ -244,15 +273,17 @@ class VLMToolCallAgent:
                 print(f"\n--- Iteration {iteration}/{self.max_iterations} ---")
 
             MAX_RETRIES = 10
+            last_error = None
             for retry in range(MAX_RETRIES):
                 try:
                     response = self._call_llm()
                     break
                 except Exception as e:
+                    last_error = e
                     self._log("OpenAI API error: %s, retry %d/%d", str(e), retry, MAX_RETRIES, level="error")
 
             if retry == MAX_RETRIES - 1:
-                return f"[Error] Failed to call LLM: {e}"
+                return f"[Error] Failed to call LLM: {last_error}"
 
             choice = response.choices[0]
             message = choice.message
@@ -264,6 +295,21 @@ class VLMToolCallAgent:
             else:
                 assistant_msg = {"role": "assistant", "content": message.content}
             assistant_msg.setdefault("role", "assistant")
+
+            reasoning_text = None
+            try:
+                if getattr(message, "reasoning", None):
+                    reasoning_text = message.reasoning
+            except Exception:
+                reasoning_text = None
+            if not reasoning_text:
+                try:
+                    if getattr(message, "reasoning_content", None):
+                        reasoning_text = message.reasoning_content
+                except Exception:
+                    reasoning_text = None
+            if reasoning_text and "reasoning" not in assistant_msg:
+                assistant_msg["reasoning"] = reasoning_text
             self.messages.append(assistant_msg)
 
             tool_call_dicts = assistant_msg.get("tool_calls")
@@ -338,7 +384,18 @@ class VLMToolCallAgent:
                         self._log("Code execution failed: %s", e, level="error")
                         text_output = f"[Execution Error] {e}\n{tb}"
 
-                    if image_parts:
+                    reasoning_backend = self._resolve_reasoning_backend()
+                    include_tool_images = bool(image_parts)
+                    emit_tool_image_followup = False
+                    if include_tool_images and reasoning_backend == "gemma4":
+                        # Local Gemma 4 + vLLM currently errors when tool-role
+                        # content carries images, but it does accept the same
+                        # images in a follow-up user turn.
+                        include_tool_images = False
+                        emit_tool_image_followup = True
+
+
+                    if include_tool_images:
                         tool_content: Any = [
                             {"type": "text", "text": text_output},
                         ] + image_parts
@@ -351,6 +408,9 @@ class VLMToolCallAgent:
                         "content": tool_content,
                     })
 
+                    if emit_tool_image_followup:
+                        self.messages.append(self._build_tool_image_followup(image_parts))
+
                     self.trajectory.record_tool_step(
                         tool_call_id=tool_call.id,
                         tool_name=fn_name,
@@ -361,8 +421,10 @@ class VLMToolCallAgent:
 
                     if self.verbose:
                         print(f"\n[Code Output] {text_output[:500]}")
-                        if image_parts:
+                        if include_tool_images:
                             print(f"  [{len(image_parts)} image(s) returned to model in tool message]")
+                        elif emit_tool_image_followup:
+                            print(f"  [{len(image_parts)} image(s) returned to model in a follow-up observation turn]")
 
                 else:
                     self._log("Unknown tool: %s", fn_name, level="warning")

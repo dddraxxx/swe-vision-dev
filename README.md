@@ -155,6 +155,62 @@ tail -f logs/qwen35_host_vllm.log
 tmux attach -t swevision-qwen35
 ```
 
+### Gemma 4 + vLLM setup
+
+Gemma 4 support in vLLM is moving quickly, so this setup uses a dedicated uv
+environment with a recent vLLM nightly build.
+
+```bash
+cd /mnt/localssd
+mkdir -p gemma4-vllm-host
+cd gemma4-vllm-host
+uv venv .venv
+uv pip install --python .venv/bin/python -U vllm --pre \
+  --extra-index-url https://wheels.vllm.ai/nightly/cu129 \
+  --extra-index-url https://download.pytorch.org/whl/cu129 \
+  --index-strategy unsafe-best-match
+uv pip install --python .venv/bin/python transformers==5.5.0
+```
+
+Then use the bundled launch scripts:
+
+```bash
+cd /mnt/localssd/swe-vision
+chmod +x scripts/launch_gemma4_vllm_mm.sh scripts/start_gemma4_vllm_tmux.sh
+scripts/start_gemma4_vllm_tmux.sh
+```
+
+Default local serving profile:
+- model: `google/gemma-4-31B-it`
+- OpenAI-compatible API on `http://127.0.0.1:8001/v1`
+- tensor parallelism: `2`
+- Gemma 4 reasoning + tool-calling parsers enabled
+
+The launcher auto-caches the official Gemma 4 chat template into
+`assets/tool_chat_template_gemma4.jinja` on first run.
+
+If another host model already occupies the GPUs, the start script exits early
+with a preflight warning instead of failing later during model load.
+
+Use these client-side environment variables with SWE-Vision:
+
+```bash
+export OPENAI_API_KEY=EMPTY
+export OPENAI_BASE_URL=http://127.0.0.1:8001/v1
+export OPENAI_MODEL=google/gemma-4-31B-it
+export OPENAI_REASONING_BACKEND=gemma4
+export VLM_ATTACH_IMAGES_TO_LLM=true
+export VLM_RUNTIME=podman
+```
+
+Useful checks:
+
+```bash
+curl http://127.0.0.1:8001/v1/models
+tail -f logs/gemma4_host_vllm.log
+tmux attach -t swevision-gemma4
+```
+
 
 ### 4. Run the agent (CLI)
 

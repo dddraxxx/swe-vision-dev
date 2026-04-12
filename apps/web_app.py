@@ -42,6 +42,7 @@ if _PROJECT_ROOT not in sys.path:
 
 try:
     from swe_vision.agent import VLMToolCallAgent
+    from swe_vision.config import MAX_ITERATIONS
     from swe_vision.trajectory import TrajectoryRecorder
     AGENT_AVAILABLE = True
     AGENT_IMPORT_ERROR = ""
@@ -184,7 +185,7 @@ def run_agent_thread(event_queue, session_id, prompt, image_paths, config):
         model=config.get("model", "openai/gpt-5.2"),
         api_key=config.get("api_key") or None,
         base_url=config.get("base_url") or None,
-        max_iterations=config.get("max_iterations", 30),
+        max_iterations=config.get("max_iterations", MAX_ITERATIONS),
         verbose=True,
         reasoning=config.get("reasoning", True),
     )
@@ -230,7 +231,7 @@ def api_chat():
     api_key = request.form.get("api_key", "")
     base_url = request.form.get("base_url", "")
     reasoning = request.form.get("reasoning", "true") == "true"
-    max_iterations = int(request.form.get("max_iterations", "30"))
+    max_iterations = int(request.form.get("max_iterations", str(MAX_ITERATIONS)))
 
     session_id = uuid.uuid4().hex[:12]
     upload_dir = os.path.join(SESSION_BASE, session_id, "uploads")

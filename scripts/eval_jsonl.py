@@ -91,7 +91,8 @@ async def main() -> None:
                 "exact_match": is_exact,
             }
             out.write(json.dumps(record) + "\n")
-            print(f"[{total}/{len(rows)}] {record['id']} exact_match={is_exact}")
+            out.flush()
+            print(f"[{total}/{len(rows)}] {record['id']} exact_match={is_exact}", flush=True)
 
     summary = {
         "num_items": total,

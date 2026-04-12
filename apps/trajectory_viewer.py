@@ -13,8 +13,12 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter, defaultdict
+from functools import lru_cache
+from io import BytesIO
 
 from flask import Flask, Response, abort, redirect, render_template_string, request, send_file, url_for
+from PIL import Image
 
 app = Flask(__name__)
 
@@ -51,6 +55,35 @@ INDEX_TEMPLATE = r"""
   .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
   h1 { font-size: 28px; margin-bottom: 8px; }
   .subtitle { color: var(--text-muted); margin-bottom: 32px; font-size: 14px; }
+  .controls {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; margin-bottom: 20px;
+  }
+  .search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .search-input {
+    flex: 1; min-width: 260px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 14px;
+  }
+  .clear-link {
+    color: var(--text-muted); font-size: 13px; white-space: nowrap;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--text-muted); font-size: 12px; font-weight: 600;
+  }
+  .chip.active {
+    color: var(--text); border-color: var(--accent); background: rgba(88,166,255,0.12);
+  }
+  .chip-count {
+    background: rgba(255,255,255,0.08); border-radius: 999px; padding: 1px 6px; font-size: 11px;
+  }
+  .group-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 26px 0 10px;
+  }
+  .group-header h2 { font-size: 16px; color: var(--purple); }
+  .group-header .count { color: var(--text-muted); font-size: 12px; }
 
   .run-card {
     background: var(--surface); border: 1px solid var(--border);
@@ -75,31 +108,64 @@ INDEX_TEMPLATE = r"""
 <body>
 <div class="container">
   <h1>Trajectory Viewer</h1>
-  <p class="subtitle">Select a trajectory run to view the full agent trace.</p>
-  {% for run in runs %}
-  <a href="/view/{{ run.name }}" style="text-decoration:none; color:inherit;">
-    <div class="run-card">
-      <div class="info">
-        <h3>{{ run.name }}
-          <span class="badge badge-steps">{{ run.total_steps }} steps</span>
-          {% if run.image_count > 0 %}
-          <span class="badge badge-images">{{ run.image_count }} images</span>
-          {% endif %}
-        </h3>
-        <p>{{ run.query[:120] }}{% if run.query|length > 120 %}…{% endif %}</p>
-        {% if run.final_answer %}
-        <p style="margin-top:4px;color:var(--green);">✓ {{ run.final_answer[:100] }}{% if run.final_answer|length > 100 %}…{% endif %}</p>
-        {% endif %}
-      </div>
-      <div class="meta">
-        <div class="model">{{ run.model }}</div>
-        <div>{{ run.start_time }}</div>
-        <div class="steps">{{ run.total_steps }} steps</div>
-      </div>
+  <p class="subtitle">Filter by model or search the prompt/final answer to find the run you want.</p>
+
+  <div class="controls">
+    <form method="get" action="/" class="search-row">
+      <input class="search-input" type="text" name="q" value="{{ search_query }}" placeholder="Search query text, final answer, or run name">
+      {% if selected_model %}
+      <input type="hidden" name="model" value="{{ selected_model }}">
+      {% endif %}
+      <button class="chip active" type="submit">Apply</button>
+      {% if selected_model or search_query %}
+      <a class="clear-link" href="/">Clear filters</a>
+      {% endif %}
+    </form>
+    <div class="chips">
+      <a href="/{% if search_query %}?q={{ search_query|urlencode }}{% endif %}" class="chip {% if not selected_model %}active{% endif %}">
+        All Models
+        <span class="chip-count">{{ total_runs }}</span>
+      </a>
+      {% for model_item in model_filters %}
+      <a href="/?model={{ model_item.name|urlencode }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="chip {% if selected_model == model_item.name %}active{% endif %}">
+        {{ model_item.name }}
+        <span class="chip-count">{{ model_item.count }}</span>
+      </a>
+      {% endfor %}
     </div>
-  </a>
+  </div>
+
+  {% for group in run_groups %}
+  <div class="group-header">
+    <h2>{{ group.model }}</h2>
+    <div class="count">{{ group.runs|length }} run(s)</div>
+  </div>
+    {% for run in group.runs %}
+    <a href="/view/{{ run.name }}" style="text-decoration:none; color:inherit;">
+      <div class="run-card">
+        <div class="info">
+          <h3>{{ run.name }}
+            <span class="badge badge-steps">{{ run.total_steps }} steps</span>
+            {% if run.image_count > 0 %}
+            <span class="badge badge-images">{{ run.image_count }} images</span>
+            {% endif %}
+          </h3>
+          <p>{{ run.query[:120] }}{% if run.query|length > 120 %}…{% endif %}</p>
+          {% if run.final_answer %}
+          <p style="margin-top:4px;color:var(--green);">✓ {{ run.final_answer[:100] }}{% if run.final_answer|length > 100 %}…{% endif %}</p>
+          {% endif %}
+          <p style="margin-top:4px;color:var(--yellow);">GT: {{ run.ground_truth if run.ground_truth is not none else 'None' }}</p>
+        </div>
+        <div class="meta">
+          <div class="model">{{ run.model }}</div>
+          <div>{{ run.start_time }}</div>
+          <div class="steps">{{ run.total_steps }} steps</div>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
   {% endfor %}
-  {% if not runs %}
+  {% if not run_groups %}
   <p style="color:var(--text-muted);">No trajectories found in <code>{{ root }}</code></p>
   {% endif %}
 </div>
@@ -283,6 +349,7 @@ VIEW_TEMPLATE = r"""
   .error-text { color: var(--red); }
   .mode-switch {
     display: flex; gap: 8px; margin: 14px 0 0;
+    flex-wrap: wrap;
   }
   .mode-link {
     display: inline-block; padding: 6px 10px; border-radius: 6px;
@@ -323,8 +390,10 @@ VIEW_TEMPLATE = r"""
     <a href="/" class="back">← All Trajectories</a>
     <h1>{{ meta.get('query', 'Trajectory') }}</h1>
     <div class="mode-switch">
-      <a class="mode-link {% if not raw_mode %}active{% endif %}" href="/view/{{ run_name }}">Trajectory</a>
-      <a class="mode-link {% if raw_mode %}active{% endif %}" href="/view/{{ run_name }}?mode=raw">Raw</a>
+      <a class="mode-link {% if not raw_mode %}active{% endif %}" href="/view/{{ run_name }}{% if low_res %}?img=low{% endif %}">Trajectory</a>
+      <a class="mode-link {% if raw_mode %}active{% endif %}" href="/view/{{ run_name }}?mode=raw{% if low_res %}&img=low{% endif %}">Raw</a>
+      <a class="mode-link {% if not low_res %}active{% endif %}" href="/view/{{ run_name }}{% if raw_mode %}?mode=raw{% endif %}">Full Images</a>
+      <a class="mode-link {% if low_res %}active{% endif %}" href="/view/{{ run_name }}?{% if raw_mode %}mode=raw&{% endif %}img=low">Low-Res Images</a>
     </div>
     {% if final_answer %}
     <div class="final-answer">
@@ -359,6 +428,10 @@ VIEW_TEMPLATE = r"""
     <div class="meta-item">
       <div class="label">Images</div>
       <div class="value">{{ image_count }}</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">Ground Truth</div>
+      <div class="value">{{ ground_truth if ground_truth is not none else 'None' }}</div>
     </div>
   </div>
 
@@ -417,8 +490,8 @@ VIEW_TEMPLATE = r"""
           <div class="image-gallery {% if step.images|length == 1 %}single{% endif %}">
             {% for img in step.images %}
               <div>
-                <img src="/image/{{ run_name }}/{{ img }}" alt="{{ img }}" onclick="openLightbox(this.src)">
-                <a class="image-link" href="/image/{{ run_name }}/{{ img }}" target="_blank" rel="noopener">Open image</a>
+                <img src="{{ image_url(run_name, img, low_res) }}" alt="{{ img }}" onclick="openLightbox(this.src)">
+                <a class="image-link" href="/image/{{ run_name }}/{{ img }}" target="_blank" rel="noopener">Open original</a>
               </div>
             {% endfor %}
           </div>
@@ -600,7 +673,7 @@ def _extract_content(content):
 
 
 def _extract_reasoning(msg: dict) -> tuple:
-    reasoning = msg.get("reasoning") or None
+    reasoning = msg.get("reasoning") or msg.get("reasoning_content") or None
     reasoning_details = msg.get("reasoning_details") or None
     if not reasoning and reasoning_details:
         for rd in reasoning_details:
@@ -742,6 +815,95 @@ def parse_tool_args(args_str: str) -> dict:
         return {}
 
 
+def image_url(run_name: str, img: str, low_res: bool = False) -> str:
+    path = f"{run_name}/{img}"
+    if low_res:
+        return f"/image/{path}?img=low"
+    return f"/image/{path}"
+
+
+def wants_low_res() -> bool:
+    return (request.args.get("img") or "").strip().lower() == "low"
+
+
+def normalize_text(text: str) -> str:
+    if not text:
+        return ""
+    text = text.lower()
+    for src, dst in {
+        "\u202f": " ",
+        "\u00a0": " ",
+        "\u2014": " ",
+        "\u2013": " ",
+        "\u2011": "-",
+        "—": " ",
+        "–": " ",
+    }.items():
+        text = text.replace(src, dst)
+    return " ".join(text.split())
+
+
+def mira_key_from_image_path(image_path: str | None) -> str | None:
+    if not image_path:
+        return None
+    image_path = image_path.replace("\\", "/")
+    parts = [part for part in image_path.split("/") if part]
+    for part in parts:
+        if part.startswith("mira_"):
+            return part[len("mira_"):]
+    stem = os.path.splitext(os.path.basename(image_path))[0]
+    if "_uid" in stem:
+        return stem
+    return None
+
+
+@lru_cache(maxsize=1)
+def load_mira_ground_truth_index() -> dict:
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "eval_examples")
+    by_image_key = {}
+    by_question = {}
+    if not os.path.isdir(root):
+        return {"by_image_key": by_image_key, "by_question": by_question}
+
+    for dirpath, _, filenames in os.walk(root):
+        if "mira_eval.jsonl" not in filenames:
+            continue
+        jsonl_path = os.path.join(dirpath, "mira_eval.jsonl")
+        try:
+            with open(jsonl_path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    row = json.loads(line)
+                    answer = row.get("answer")
+                    image = row.get("image", "")
+                    image_key = os.path.splitext(os.path.basename(image))[0]
+                    question_key = normalize_text(row.get("question", ""))
+                    if image_key and answer is not None:
+                        by_image_key[image_key] = str(answer)
+                    if question_key and answer is not None:
+                        by_question[question_key] = str(answer)
+        except Exception:
+            continue
+    return {"by_image_key": by_image_key, "by_question": by_question}
+
+
+def lookup_ground_truth(meta: dict) -> str | None:
+    if not meta:
+        return None
+    index = load_mira_ground_truth_index()
+    image_paths = meta.get("image_paths") or []
+    for image_path in image_paths:
+        image_key = mira_key_from_image_path(image_path)
+        if image_key and image_key in index["by_image_key"]:
+            return index["by_image_key"][image_key]
+    question_key = normalize_text(meta.get("query", ""))
+    if question_key:
+        return index["by_question"].get(question_key)
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Routes
 # ─────────────────────────────────────────────────────────────────────
@@ -750,6 +912,9 @@ def parse_tool_args(args_str: str) -> dict:
 def index():
     traj_dirs = find_trajectory_dirs(TRAJECTORIES_ROOT)
     runs = []
+    selected_model = (request.args.get("model") or "").strip()
+    search_query = (request.args.get("q") or "").strip()
+    search_lower = search_query.lower()
     for d in traj_dirs:
         try:
             fmt = detect_format(d)
@@ -757,6 +922,7 @@ def index():
             if fmt == "trajectory":
                 data = load_trajectory(d)
                 meta = data.get("metadata", {})
+                ground_truth = lookup_ground_truth(meta)
                 runs.append({
                     "name": rel_name,
                     "query": meta.get("query", "(no query)"),
@@ -765,6 +931,7 @@ def index():
                     "total_steps": meta.get("total_steps", len(data.get("steps", []))),
                     "final_answer": data.get("final_answer"),
                     "image_count": count_images(d),
+                    "ground_truth": ground_truth,
                 })
             elif fmt == "raw":
                 messages = load_raw_messages(d)
@@ -777,10 +944,46 @@ def index():
                     "total_steps": meta.get("total_steps", len(steps)),
                     "final_answer": final_answer,
                     "image_count": count_images(d),
+                    "ground_truth": None,
                 })
         except Exception:
             continue
-    return render_template_string(INDEX_TEMPLATE, runs=runs, root=TRAJECTORIES_ROOT)
+
+    model_counts = Counter(run["model"] for run in runs)
+
+    if selected_model:
+        runs = [run for run in runs if run["model"] == selected_model]
+    if search_lower:
+        runs = [
+            run for run in runs
+            if search_lower in run["name"].lower()
+            or search_lower in (run["query"] or "").lower()
+            or search_lower in (run["final_answer"] or "").lower()
+            or search_lower in (run["model"] or "").lower()
+        ]
+
+    grouped = defaultdict(list)
+    for run in runs:
+        grouped[run["model"]].append(run)
+
+    run_groups = [
+        {"model": model, "runs": grouped[model]}
+        for model in sorted(grouped.keys(), key=lambda model: (-len(grouped[model]), model.lower()))
+    ]
+    model_filters = [
+        {"name": model, "count": count}
+        for model, count in sorted(model_counts.items(), key=lambda item: (-item[1], item[0].lower()))
+    ]
+
+    return render_template_string(
+        INDEX_TEMPLATE,
+        run_groups=run_groups,
+        root=TRAJECTORIES_ROOT,
+        model_filters=model_filters,
+        selected_model=selected_model,
+        search_query=search_query,
+        total_runs=sum(model_counts.values()),
+    )
 
 
 @app.route("/view/<path:run_name>")
@@ -791,6 +994,7 @@ def view_trajectory(run_name: str):
         abort(404, f"Trajectory not found: {run_name}")
 
     raw_mode = request.args.get("mode") == "raw"
+    low_res = wants_low_res()
 
     if fmt == "trajectory":
         if raw_mode and os.path.isfile(os.path.join(traj_dir, "messages_raw.json")):
@@ -814,16 +1018,20 @@ def view_trajectory(run_name: str):
             meta, steps, final_answer = convert_raw_to_steps(messages)
 
     img_count = count_images(traj_dir)
+    ground_truth = lookup_ground_truth(meta) if isinstance(meta, dict) else None
 
     return render_template_string(
         VIEW_TEMPLATE,
         meta=meta,
         steps=steps,
         final_answer=final_answer,
+        ground_truth=ground_truth,
         run_name=run_name,
         image_count=img_count,
         parse_args=parse_tool_args,
         raw_mode=raw_mode,
+        low_res=low_res,
+        image_url=image_url,
     )
 
 
@@ -835,6 +1043,23 @@ def serve_image(img_path: str):
         abort(403)
     if not os.path.isfile(full_path):
         abort(404)
+
+    if wants_low_res():
+        ext = os.path.splitext(full_path)[1].lower()
+        if ext in {".png", ".jpg", ".jpeg", ".webp"}:
+            try:
+                with Image.open(full_path) as img:
+                    # Preserve display dimensions and just send a cheaper encoding.
+                    if getattr(img, "is_animated", False):
+                        return send_file(full_path)
+                    if img.mode not in ("RGB", "RGBA"):
+                        img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
+                    output = BytesIO()
+                    img.save(output, format="WEBP", quality=35, method=6)
+                    output.seek(0)
+                    return send_file(output, mimetype="image/webp")
+            except Exception:
+                return send_file(full_path)
     return send_file(full_path)
 
 
