@@ -336,10 +336,12 @@ usage: python -m swe_vision.cli [-h] [--image IMAGE] [--interactive]
 | `OPENAI_API_KEY` | API key for the LLM provider | *(required)* |
 | `OPENAI_BASE_URL` | Custom API base URL | OpenAI default |
 | `OPENAI_MODEL` | Default model name | `gpt-4o` |
-| `VLM_RUNTIME` | Runtime backend: `local_sandbox`, `local`, or `docker` | `local_sandbox` |
+| `VLM_RUNTIME` | Runtime backend: `local_sandbox`, `local`, `docker`, or `podman` | `local_sandbox` |
 | `VLM_DOCKER_IMAGE` | Docker image name for the kernel | `swe-vision:latest` |
 | `VLM_DOCKERFILE_DIR` | Path to the Dockerfile directory | `./env/` |
-| `VLM_HOST_WORK_DIR` | Host-side working directory for file sharing | `~/tmp/vlm_docker_workdir` |
+| `VLM_HOST_WORK_DIR` | Host-side working directory for file sharing | `/mnt/localssd/tmp/vlm_docker_workdir` |
+| `VLM_PODMAN_ROOT` | Podman storage root (rootful) | `/mnt/localssd/podman-root` |
+| `VLM_PODMAN_RUNROOT` | Podman runroot (rootful) | `/mnt/localssd/podman-runroot` |
 | `VLM_WEB_SESSION_DIR` | Session storage for the web app | `/tmp` |
 
 ## Programmatic Usage

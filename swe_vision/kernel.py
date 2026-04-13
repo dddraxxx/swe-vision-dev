@@ -9,6 +9,7 @@ Notebook kernel manager.
 """
 
 import asyncio
+import base64
 import json
 import os
 import queue
@@ -19,6 +20,7 @@ import subprocess
 import sys
 import time
 import uuid
+from io import BytesIO
 from typing import Any, Dict, List
 
 from swe_vision.config import (
@@ -30,6 +32,8 @@ from swe_vision.config import (
     HOST_WORK_DIR,
     KERNEL_PORTS,
     MAX_OUTPUT_CHARS,
+    PODMAN_ROOT,
+    PODMAN_RUNROOT,
     RUNTIME,
     logger,
 )
@@ -232,7 +236,12 @@ class JupyterNotebookKernel:
     # Podman helpers
 
     def _podman_cmd(self) -> List[str]:
-        return ["sudo", "podman"]
+        cmd = ["sudo", "podman"]
+        if PODMAN_ROOT:
+            cmd += ["--root", PODMAN_ROOT]
+        if PODMAN_RUNROOT:
+            cmd += ["--runroot", PODMAN_RUNROOT]
+        return cmd
 
     def _podman_image_exists(self) -> bool:
         result = subprocess.run(
@@ -269,6 +278,7 @@ class JupyterNotebookKernel:
         cmd = self._podman_cmd() + [
             "run",
             "-d",
+            "--rm",
             "--name",
             container_name,
             "--network=host",
@@ -370,6 +380,10 @@ class JupyterNotebookKernel:
                     self._connect_docker_client()
                     self._kc.wait_for_ready(timeout=self._timeout)
             elif self._runtime == "podman":
+                if PODMAN_ROOT:
+                    os.makedirs(PODMAN_ROOT, exist_ok=True)
+                if PODMAN_RUNROOT:
+                    os.makedirs(PODMAN_RUNROOT, exist_ok=True)
                 self._build_podman_image()
                 conn_file = self._write_connection_file()
                 self._start_podman_container()
@@ -447,6 +461,64 @@ class JupyterNotebookKernel:
         await asyncio.get_event_loop().run_in_executor(None, _sync_execute)
         return cell_result
 
+    def _resolve_display_image_src(self, src: str) -> str | None:
+        src = (src or "").strip()
+        if not src or src.startswith(("http://", "https://", "data:")):
+            return None
+        if src.startswith("file://"):
+            src = src[len("file://") :]
+        if not os.path.isabs(src):
+            src = os.path.join(self._host_work_dir, src)
+        return src
+
+    @staticmethod
+    def _encode_image_file_as_png_base64(image_path: str) -> str:
+        from PIL import Image
+
+        with Image.open(image_path) as image:
+            if image.mode not in {"RGB", "RGBA", "L"}:
+                image = image.convert("RGBA")
+            buf = BytesIO()
+            image.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    def _extract_display_images(self, display_item: Dict[str, Any]) -> List[str]:
+        images: List[str] = []
+        if "image/png" in display_item:
+            images.append(display_item["image/png"])
+            return images
+        if "image/jpeg" in display_item:
+            # Normalize notebook JPEG output to PNG so downstream handling can
+            # treat all notebook images as a single format.
+            try:
+                from PIL import Image
+
+                jpeg_bytes = base64.b64decode(display_item["image/jpeg"])
+                with Image.open(BytesIO(jpeg_bytes)) as image:
+                    if image.mode not in {"RGB", "RGBA", "L"}:
+                        image = image.convert("RGBA")
+                    buf = BytesIO()
+                    image.save(buf, format="PNG")
+                images.append(base64.b64encode(buf.getvalue()).decode("utf-8"))
+            except Exception as exc:
+                logger.warning("Failed to normalize JPEG display output: %s", exc)
+            return images
+
+        html = display_item.get("text/html")
+        if not isinstance(html, str):
+            return images
+
+        srcs = re.findall(r"""<img[^>]+src=["']([^"']+)["']""", html, flags=re.IGNORECASE)
+        for src in srcs:
+            resolved = self._resolve_display_image_src(src)
+            if not resolved or not os.path.exists(resolved):
+                continue
+            try:
+                images.append(self._encode_image_file_as_png_base64(resolved))
+            except Exception as exc:
+                logger.warning("Failed to capture displayed image '%s': %s", resolved, exc)
+        return images
+
     async def execute(self, code: str) -> Dict[str, Any]:
         if not self._started:
             await self.start()
@@ -470,10 +542,7 @@ class JupyterNotebookKernel:
 
         images = []
         for display_item in raw["display"]:
-            if "image/png" in display_item:
-                images.append(display_item["image/png"])
-            elif "image/jpeg" in display_item:
-                images.append(display_item["image/jpeg"])
+            images.extend(self._extract_display_images(display_item))
 
         text_output = "\n".join(text_parts).strip()
         if not text_output and not images:

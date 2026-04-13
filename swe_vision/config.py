@@ -42,6 +42,16 @@ HOST_WORK_DIR = os.path.join(
     datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
 )
 
+# Podman storage configuration (rootful Podman defaults to /var/lib/containers)
+PODMAN_ROOT = os.environ.get(
+    "VLM_PODMAN_ROOT",
+    "/mnt/localssd/podman-root",
+)
+PODMAN_RUNROOT = os.environ.get(
+    "VLM_PODMAN_RUNROOT",
+    "/mnt/localssd/podman-runroot",
+)
+
 # Docker image / build settings
 DOCKER_IMAGE_NAME = os.environ.get("VLM_DOCKER_IMAGE", "swe-vision:latest")
 
@@ -150,6 +160,7 @@ The image file path will be provided to you.
 - Always use print() to output results you want to see.
 - When you generate plots with matplotlib, use plt.show() — the plot image will be \
 captured and returned to you.
+- You can `display()` a local image file or a PIL image, or leave a PIL image as the final value of a notebook cell, and the rendered image will be captured and returned to you.
 - Think step by step. Examine intermediate results before giving a final answer.
 - When you're confident in your answer, call the **finish** tool with your final response.
 - If code produces an error, analyze the error and try a different approach.

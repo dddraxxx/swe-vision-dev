@@ -73,6 +73,8 @@ class VLMToolCallAgent:
 
         self.kernel: Optional[JupyterNotebookKernel] = None
         self.file_manager = NotebookFileManager()
+        self._current_uploaded_file_paths: List[str] = []
+        self._uploaded_image_vars_ready = False
 
         self.messages: List[Dict[str, Any]] = []
         self.raw_messages: List[Dict[str, Any]] = []
@@ -102,8 +104,7 @@ class VLMToolCallAgent:
         }
 
     async def _ensure_kernel(self):
-        if self.kernel is None:
-            self.kernel = JupyterNotebookKernel()
+        self._ensure_kernel_instance()
         if not self.kernel._started:
             try:
                 await self.kernel.start()
@@ -112,6 +113,15 @@ class VLMToolCallAgent:
                 # behind. Drop the instance so the next retry gets a clean runtime.
                 self.kernel = None
                 raise
+            self.file_manager.setup_work_dir(
+                host_work_dir=self.kernel.host_work_dir,
+                container_work_dir=self.kernel.container_work_dir,
+                kernel=self.kernel,
+            )
+
+    def _ensure_kernel_instance(self):
+        if self.kernel is None:
+            self.kernel = JupyterNotebookKernel()
             self.file_manager.setup_work_dir(
                 host_work_dir=self.kernel.host_work_dir,
                 container_work_dir=self.kernel.container_work_dir,
@@ -157,6 +167,8 @@ class VLMToolCallAgent:
         if file_hints:
             paths_str = ", ".join(f"`{p}`" for p in file_hints)
             text += f"\n\n[Uploaded file(s) available at: {paths_str}]"
+        self._current_uploaded_file_paths = list(file_hints)
+        self._uploaded_image_vars_ready = False
         content.insert(0, {"type": "text", "text": text})
 
         return {"role": "user", "content": content}
@@ -240,6 +252,7 @@ class VLMToolCallAgent:
 
     async def _handle_execute_code(self, code: str) -> Dict[str, Any]:
         await self._ensure_kernel()
+        await self._prime_uploaded_image_vars()
 
         self._log("Executing code in Docker Jupyter notebook:\n%s",
                    code[:200] + ("..." if len(code) > 200 else ""))
@@ -259,6 +272,40 @@ class VLMToolCallAgent:
             "image_parts": image_parts,
             "base64_images": result["images"],
         }
+
+    async def _prime_uploaded_image_vars(self) -> None:
+        if self._uploaded_image_vars_ready:
+            return
+
+        uploaded_files = list(self._current_uploaded_file_paths)
+        bootstrap_code = f"""
+from pathlib import Path
+
+uploaded_files = {json.dumps(uploaded_files)}
+image_paths = list(uploaded_files)
+image_path = image_paths[0] if len(image_paths) == 1 else None
+
+try:
+    from PIL import Image
+except Exception:
+    Image = None
+
+images = []
+if Image is not None:
+    for _image_path in image_paths:
+        try:
+            images.append(Image.open(_image_path).convert("RGB"))
+        except Exception:
+            images.append(None)
+else:
+    images = [None for _ in image_paths]
+
+uploaded_images = images
+image = images[0] if len(images) == 1 else None
+image_clue = images
+"""
+        await self.kernel.execute(bootstrap_code)
+        self._uploaded_image_vars_ready = True
 
     def _init_trajectory(self, query: str, image_paths: Optional[List[str]]) -> TrajectoryRecorder:
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -288,11 +335,15 @@ class VLMToolCallAgent:
         Returns the final answer string.
         """
         self.trajectory = self._init_trajectory(query, image_paths)
+        self._current_uploaded_file_paths = []
+        self._uploaded_image_vars_ready = False
 
         system_msg = {"role": "system", "content": self.system_prompt}
         self.messages = [system_msg]
         self.raw_messages = [dict(system_msg)]
 
+        if image_paths:
+            self._ensure_kernel_instance()
         user_msg = self._build_user_message(query, image_paths)
         self.messages.append(user_msg)
         self.raw_messages.append(user_msg)
