@@ -75,6 +75,7 @@ class VLMToolCallAgent:
         self.file_manager = NotebookFileManager()
 
         self.messages: List[Dict[str, Any]] = []
+        self.raw_messages: List[Dict[str, Any]] = []
 
         self.trajectory: Optional[TrajectoryRecorder] = None
 
@@ -104,7 +105,13 @@ class VLMToolCallAgent:
         if self.kernel is None:
             self.kernel = JupyterNotebookKernel()
         if not self.kernel._started:
-            await self.kernel.start()
+            try:
+                await self.kernel.start()
+            except Exception:
+                # Failed kernel starts can leave stale ports/channels/containers
+                # behind. Drop the instance so the next retry gets a clean runtime.
+                self.kernel = None
+                raise
             self.file_manager.setup_work_dir(
                 host_work_dir=self.kernel.host_work_dir,
                 container_work_dir=self.kernel.container_work_dir,
@@ -153,6 +160,49 @@ class VLMToolCallAgent:
         content.insert(0, {"type": "text", "text": text})
 
         return {"role": "user", "content": content}
+
+    def _message_to_history_dict(self, message: Any) -> Dict[str, Any]:
+        """Keep only API-supported assistant fields in conversation history."""
+        history_msg: Dict[str, Any] = {
+            "role": getattr(message, "role", "assistant") or "assistant",
+        }
+
+        content = getattr(message, "content", None)
+        if content is not None:
+            history_msg["content"] = content
+
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
+            normalized_tool_calls = []
+            for tool_call in tool_calls:
+                normalized_tool_calls.append({
+                    "id": getattr(tool_call, "id", None),
+                    "type": getattr(tool_call, "type", "function"),
+                    "function": {
+                        "name": getattr(tool_call.function, "name", None),
+                        "arguments": getattr(tool_call.function, "arguments", ""),
+                    },
+                })
+            history_msg["tool_calls"] = normalized_tool_calls
+
+        return history_msg
+
+    def _message_to_raw_dict(self, message: Any, reasoning_text: Optional[str]) -> Dict[str, Any]:
+        """Preserve the full assistant turn for trajectory inspection."""
+        if hasattr(message, "model_dump"):
+            raw_msg = message.model_dump()
+        elif hasattr(message, "to_dict"):
+            raw_msg = message.to_dict()
+        else:
+            raw_msg = {
+                "role": getattr(message, "role", "assistant") or "assistant",
+                "content": getattr(message, "content", None),
+            }
+
+        raw_msg.setdefault("role", "assistant")
+        if reasoning_text and "reasoning" not in raw_msg and "reasoning_content" not in raw_msg:
+            raw_msg["reasoning"] = reasoning_text
+        return raw_msg
 
     def _call_llm(self) -> Any:
         kwargs = dict(
@@ -239,12 +289,13 @@ class VLMToolCallAgent:
         """
         self.trajectory = self._init_trajectory(query, image_paths)
 
-        self.messages = [
-            {"role": "system", "content": self.system_prompt},
-        ]
+        system_msg = {"role": "system", "content": self.system_prompt}
+        self.messages = [system_msg]
+        self.raw_messages = [dict(system_msg)]
 
         user_msg = self._build_user_message(query, image_paths)
         self.messages.append(user_msg)
+        self.raw_messages.append(user_msg)
 
         self.trajectory.record_user_step(query, image_paths)
 
@@ -262,7 +313,7 @@ class VLMToolCallAgent:
             if final_answer is not None:
                 self.trajectory.record_finish(final_answer)
             self.trajectory.save()
-            self.trajectory.save_messages_raw(self.messages)
+            self.trajectory.save_messages_raw(self.raw_messages)
 
         return final_answer
 
@@ -288,14 +339,6 @@ class VLMToolCallAgent:
             choice = response.choices[0]
             message = choice.message
 
-            if hasattr(message, "to_dict"):
-                assistant_msg = message.to_dict()
-            elif hasattr(message, "model_dump"):
-                assistant_msg = message.model_dump()
-            else:
-                assistant_msg = {"role": "assistant", "content": message.content}
-            assistant_msg.setdefault("role", "assistant")
-
             reasoning_text = None
             try:
                 if getattr(message, "reasoning", None):
@@ -308,15 +351,16 @@ class VLMToolCallAgent:
                         reasoning_text = message.reasoning_content
                 except Exception:
                     reasoning_text = None
-            if reasoning_text and "reasoning" not in assistant_msg:
-                assistant_msg["reasoning"] = reasoning_text
+
+            assistant_msg = self._message_to_history_dict(message)
+            assistant_raw_msg = self._message_to_raw_dict(message, reasoning_text)
             self.messages.append(assistant_msg)
+            self.raw_messages.append(assistant_raw_msg)
 
             tool_call_dicts = assistant_msg.get("tool_calls")
-            reasoning_details = assistant_msg.get("reasoning_details")
 
             self.trajectory.record_assistant_step(
-                message.content, tool_call_dicts, reasoning_details=reasoning_details,
+                message.content, tool_call_dicts, reasoning_details=reasoning_text,
             )
 
             try:
@@ -335,6 +379,22 @@ class VLMToolCallAgent:
                     print(f"\n[Assistant] {message.content[:500]}")
 
             if not message.tool_calls:
+                if not message.content:
+                    self._log(
+                        "Model returned no content and no tool calls (finish_reason=%s); asking for an actionable next step.",
+                        choice.finish_reason,
+                        level="warning",
+                    )
+                    reminder_msg = {
+                        "role": "user",
+                        "content": (
+                            "Please respond with either an `execute_code` tool call if more analysis is needed, "
+                            "or a `finish` tool call with the final answer."
+                        ),
+                    }
+                    self.messages.append(reminder_msg)
+                    self.raw_messages.append(reminder_msg)
+                    continue
                 if choice.finish_reason == "stop":
                     self._log("Model stopped without calling finish tool.")
                     return message.content or "[No response]"
@@ -347,11 +407,13 @@ class VLMToolCallAgent:
                 except json.JSONDecodeError as e:
                     self._log("Failed to parse tool arguments: %s", e, level="error")
                     err_text = f"[Error] Invalid JSON arguments: {e}"
-                    self.messages.append({
+                    tool_error_msg = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": err_text,
-                    })
+                    }
+                    self.messages.append(tool_error_msg)
+                    self.raw_messages.append(tool_error_msg)
                     self.trajectory.record_tool_step(
                         tool_call_id=tool_call.id,
                         tool_name=fn_name,
@@ -402,14 +464,18 @@ class VLMToolCallAgent:
                     else:
                         tool_content = text_output
 
-                    self.messages.append({
+                    tool_msg = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": tool_content,
-                    })
+                    }
+                    self.messages.append(tool_msg)
+                    self.raw_messages.append(tool_msg)
 
                     if emit_tool_image_followup:
-                        self.messages.append(self._build_tool_image_followup(image_parts))
+                        followup_msg = self._build_tool_image_followup(image_parts)
+                        self.messages.append(followup_msg)
+                        self.raw_messages.append(followup_msg)
 
                     self.trajectory.record_tool_step(
                         tool_call_id=tool_call.id,
@@ -429,11 +495,13 @@ class VLMToolCallAgent:
                 else:
                     self._log("Unknown tool: %s", fn_name, level="warning")
                     err_text = f"[Error] Unknown tool: {fn_name}"
-                    self.messages.append({
+                    unknown_tool_msg = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": err_text,
-                    })
+                    }
+                    self.messages.append(unknown_tool_msg)
+                    self.raw_messages.append(unknown_tool_msg)
                     self.trajectory.record_tool_step(
                         tool_call_id=tool_call.id,
                         tool_name=fn_name,
@@ -487,4 +555,5 @@ class VLMToolCallAgent:
     async def cleanup(self):
         """Shut down the Docker kernel and clean up resources."""
         if self.kernel:
-            await self.kernel.shutdown()
+            await self.kernel.shutdown(cleanup_work_dir=True)
+            self.kernel = None

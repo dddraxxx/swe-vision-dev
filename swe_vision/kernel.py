@@ -26,6 +26,7 @@ from swe_vision.config import (
     CONTAINER_WORK_DIR,
     DOCKER_IMAGE_NAME,
     DOCKERFILE_DIR,
+    HOST_WORK_BASE,
     HOST_WORK_DIR,
     KERNEL_PORTS,
     MAX_OUTPUT_CHARS,
@@ -55,9 +56,9 @@ class JupyterNotebookKernel:
         runtime: str = RUNTIME,
     ):
         self._timeout = timeout
-        self._host_work_dir = host_work_dir
+        self._host_work_dir = self._resolve_host_work_dir(host_work_dir)
         self._runtime = runtime
-        self._container_work_dir = host_work_dir if runtime in {"local", "local_sandbox"} else container_work_dir
+        self._container_work_dir = self._host_work_dir if runtime in {"local", "local_sandbox"} else container_work_dir
         self._docker_image = docker_image
         self._dockerfile_dir = dockerfile_dir
 
@@ -70,6 +71,16 @@ class JupyterNotebookKernel:
 
         self._kernel_key = uuid.uuid4().hex
         self._kernel_ports = self._allocate_kernel_ports()
+
+    @staticmethod
+    def _resolve_host_work_dir(host_work_dir: str) -> str:
+        """
+        Give each kernel instance its own work directory so failed or slow
+        startups do not reuse stale connection files or notebook artifacts.
+        """
+        base_dir = os.path.abspath(host_work_dir or HOST_WORK_BASE)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        return os.path.join(base_dir, f"{timestamp}_{uuid.uuid4().hex[:8]}")
 
     @property
     def host_work_dir(self) -> str:
@@ -209,6 +220,15 @@ class JupyterNotebookKernel:
         self._kc.start_channels()
         logger.info("Kernel client connected to 127.0.0.1 ports %s", list(self._kernel_ports.values()))
 
+    def _stop_kernel_client_channels(self) -> None:
+        if self._kc is None:
+            return
+        try:
+            self._kc.stop_channels()
+        except Exception as exc:
+            logger.warning("Failed to stop kernel client channels: %s", exc)
+        self._kc = None
+
     # Podman helpers
 
     def _podman_cmd(self) -> List[str]:
@@ -334,45 +354,53 @@ class JupyterNotebookKernel:
 
         os.makedirs(self._host_work_dir, exist_ok=True)
 
-        if self._runtime == "docker":
-            self._build_image()
-            conn_file = self._write_connection_file()
-            self._start_container()
-            self._start_kernel_in_container(conn_file)
-            self._connect_docker_client()
-            try:
-                self._kc.wait_for_ready(timeout=self._timeout)
-            except RuntimeError:
-                logger.warning("Kernel wait_for_ready timed out, retrying after 3s...")
-                time.sleep(3)
-                self._kc.wait_for_ready(timeout=self._timeout)
-        elif self._runtime == "podman":
-            self._build_podman_image()
-            conn_file = self._write_connection_file()
-            self._start_podman_container()
-            self._start_kernel_in_podman(conn_file)
-            self._connect_docker_client()
-            try:
-                self._kc.wait_for_ready(timeout=self._timeout)
-            except RuntimeError:
-                logger.warning("Kernel wait_for_ready timed out, retrying after 3s...")
-                time.sleep(3)
-                self._kc.wait_for_ready(timeout=self._timeout)
-        elif self._runtime == "local":
-            self._start_local_kernel()
-        elif self._runtime == "local_sandbox":
-            self._start_local_sandbox_kernel()
-        else:
-            raise ValueError(f"Unsupported runtime: {self._runtime}")
+        try:
+            if self._runtime == "docker":
+                self._build_image()
+                conn_file = self._write_connection_file()
+                self._start_container()
+                self._start_kernel_in_container(conn_file)
+                self._connect_docker_client()
+                try:
+                    self._kc.wait_for_ready(timeout=self._timeout)
+                except RuntimeError:
+                    logger.warning("Kernel wait_for_ready timed out, retrying after 3s...")
+                    self._stop_kernel_client_channels()
+                    time.sleep(3)
+                    self._connect_docker_client()
+                    self._kc.wait_for_ready(timeout=self._timeout)
+            elif self._runtime == "podman":
+                self._build_podman_image()
+                conn_file = self._write_connection_file()
+                self._start_podman_container()
+                self._start_kernel_in_podman(conn_file)
+                self._connect_docker_client()
+                try:
+                    self._kc.wait_for_ready(timeout=self._timeout)
+                except RuntimeError:
+                    logger.warning("Kernel wait_for_ready timed out, retrying after 3s...")
+                    self._stop_kernel_client_channels()
+                    time.sleep(3)
+                    self._connect_docker_client()
+                    self._kc.wait_for_ready(timeout=self._timeout)
+            elif self._runtime == "local":
+                self._start_local_kernel()
+            elif self._runtime == "local_sandbox":
+                self._start_local_sandbox_kernel()
+            else:
+                raise ValueError(f"Unsupported runtime: {self._runtime}")
 
-        test_result = await self._execute_jupyter("print('kernel_ready')")
-        if "kernel_ready" not in test_result.get("stdout", ""):
-            raise RuntimeError(f"{self._runtime} notebook runtime failed health check")
+            test_result = await self._execute_jupyter("print('kernel_ready')")
+            if "kernel_ready" not in test_result.get("stdout", ""):
+                raise RuntimeError(f"{self._runtime} notebook runtime failed health check")
 
-        await self._execute_jupyter("%config InlineBackend.figure_format = 'png'")
+            await self._execute_jupyter("%config InlineBackend.figure_format = 'png'")
 
-        self._started = True
-        logger.info("Notebook runtime started successfully (runtime=%s).", self._runtime)
+            self._started = True
+            logger.info("Notebook runtime started successfully (runtime=%s).", self._runtime)
+        except Exception:
+            await self.shutdown(cleanup_work_dir=True)
+            raise
 
     async def _execute_jupyter(self, code: str) -> Dict[str, Any]:
         cell_result: Dict[str, Any] = {
@@ -467,12 +495,7 @@ class JupyterNotebookKernel:
         }
 
     async def shutdown(self, cleanup_work_dir: bool = False) -> None:
-        if self._kc is not None:
-            try:
-                self._kc.stop_channels()
-            except Exception as exc:
-                logger.warning("Failed to stop kernel client channels: %s", exc)
-            self._kc = None
+        self._stop_kernel_client_channels()
 
         if self._km is not None:
             try:

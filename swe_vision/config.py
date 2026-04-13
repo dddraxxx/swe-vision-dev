@@ -32,13 +32,13 @@ RUNTIME = os.environ.get(
 # Container-side working directory (visible to the kernel)
 CONTAINER_WORK_DIR = "/mnt/data"
 
-# Host-side directory that is volume-mounted into the container.
-_HOST_WORK_BASE = os.environ.get(
+# Host-side directory root that is volume-mounted into the container.
+HOST_WORK_BASE = os.environ.get(
     "VLM_HOST_WORK_DIR",
-    os.path.join(os.path.expanduser("~"), "tmp", "vlm_docker_workdir"),
+    "/mnt/localssd/tmp/vlm_docker_workdir",
 )
 HOST_WORK_DIR = os.path.join(
-    _HOST_WORK_BASE,
+    HOST_WORK_BASE,
     datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
 )
 
