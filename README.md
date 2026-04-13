@@ -264,64 +264,8 @@ source .venv/bin/activate
 python scripts/eval_jsonl.py --input eval_examples/test_image_eval.jsonl --output-dir eval_runs/sample
 ```
 
-### Run MIRA25 on another machine
-
-For a fresh host, the shortest path is:
-
-```bash
-git clone git@github.com:dddraxxx/swe-vision-dev.git
-cd swe-vision
-uv venv .venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
-```
-
-Build the Podman runtime image once:
-
-```bash
-export VLM_RUNTIME=podman
-export VLM_HOST_WORK_DIR=/mnt/localssd/tmp/vlm_docker_workdir
-export VLM_PODMAN_ROOT=/mnt/localssd/podman-root
-export VLM_PODMAN_RUNROOT=/mnt/localssd/podman-runroot
-sudo podman --root "$VLM_PODMAN_ROOT" --runroot "$VLM_PODMAN_RUNROOT" \
-  build --isolation=chroot -t swe-vision:latest ./env
-```
-
-For OpenRouter-hosted Qwen 3.6:
-
-```bash
-export OPENAI_API_KEY="$OPENROUTER_API_KEY"
-export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
-export OPENAI_MODEL="qwen/qwen3.6-plus"
-```
-
-Then launch the 25-case MIRA run:
-
-```bash
-python scripts/eval_jsonl.py \
-  --input eval_examples/mira25_mixed/mira_eval.jsonl \
-  --output-dir eval_runs/mira25_qwen36plus \
-  --model qwen/qwen3.6-plus \
-  --max-iterations 50 \
-  --reasoning \
-  --concurrency 4
-```
-
-Notes:
-- `--concurrency 4` was stable on this machine. `25` concurrent cases caused stalled workers and long-lived containers.
-- The eval runner is resumable. Re-run the same command with the same `--output-dir` and it skips finished rows already written to `predictions.jsonl`.
-- For long runs, prefer `tmux` and log redirection:
-
-```bash
-tmux new -s mira25-qwen36plus \
-  "cd /path/to/swe-vision && source .venv/bin/activate && python scripts/eval_jsonl.py \
-    --input eval_examples/mira25_mixed/mira_eval.jsonl \
-    --output-dir eval_runs/mira25_qwen36plus \
-    --model qwen/qwen3.6-plus \
-    --max-iterations 50 \
-    --reasoning \
-    --concurrency 4 | tee logs/mira25-qwen36plus.log"
-```
+For the 25-case MIRA recipe on a fresh machine, see
+[`docs/mira25_other_machine.md`](./docs/mira25_other_machine.md).
 
 ### 7. View trajectories
 
