@@ -21,6 +21,7 @@ import sys
 import time
 import uuid
 from io import BytesIO
+from threading import Lock
 from typing import Any, Dict, List
 
 from swe_vision.config import (
@@ -50,6 +51,9 @@ class JupyterNotebookKernel:
     rootful Podman runtime configured for this host.
     """
 
+    _reserved_kernel_ports_lock = Lock()
+    _reserved_kernel_ports: set[int] = set()
+
     def __init__(
         self,
         timeout: float = CELL_TIMEOUT,
@@ -74,7 +78,7 @@ class JupyterNotebookKernel:
         self._started = False
 
         self._kernel_key = uuid.uuid4().hex
-        self._kernel_ports = self._allocate_kernel_ports()
+        self._kernel_ports = None
 
     @staticmethod
     def _resolve_host_work_dir(host_work_dir: str) -> str:
@@ -126,11 +130,10 @@ class JupyterNotebookKernel:
                     logger.debug("  [docker build] %s", line)
         logger.info("Docker image '%s' built successfully.", self._docker_image)
 
-    @staticmethod
-    def _allocate_kernel_ports() -> Dict[str, int]:
+    @classmethod
+    def _allocate_kernel_ports(cls) -> Dict[str, int]:
         ports: Dict[str, int] = {}
-        sockets: List[socket.socket] = []
-        try:
+        with cls._reserved_kernel_ports_lock:
             for name in (
                 "shell_port",
                 "iopub_port",
@@ -138,14 +141,25 @@ class JupyterNotebookKernel:
                 "control_port",
                 "hb_port",
             ):
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.bind(("127.0.0.1", 0))
-                ports[name] = sock.getsockname()[1]
-                sockets.append(sock)
-        finally:
-            for sock in sockets:
-                sock.close()
+                while True:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    try:
+                        sock.bind(("127.0.0.1", 0))
+                        port = sock.getsockname()[1]
+                    finally:
+                        sock.close()
+                    if port in cls._reserved_kernel_ports:
+                        continue
+                    cls._reserved_kernel_ports.add(port)
+                    ports[name] = port
+                    break
         return ports
+
+    @classmethod
+    def _release_kernel_ports(cls, ports: List[int]) -> None:
+        with cls._reserved_kernel_ports_lock:
+            for port in ports:
+                cls._reserved_kernel_ports.discard(port)
 
     def _write_connection_file(self) -> str:
         conn = {
@@ -361,6 +375,9 @@ class JupyterNotebookKernel:
     async def start(self) -> None:
         if self._started:
             return
+
+        if self._kernel_ports is None:
+            self._kernel_ports = self._allocate_kernel_ports()
 
         os.makedirs(self._host_work_dir, exist_ok=True)
 
@@ -600,6 +617,10 @@ class JupyterNotebookKernel:
             self._podman_container_name = None
 
         self._started = False
+
+        if self._kernel_ports is not None:
+            self._release_kernel_ports(list(self._kernel_ports.values()))
+            self._kernel_ports = None
 
         if cleanup_work_dir and os.path.isdir(self._host_work_dir):
             try:
