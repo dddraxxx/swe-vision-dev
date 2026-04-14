@@ -1,0 +1,6 @@
+{
+  "num_items": 25,
+  "target_items": 25,
+  "exact_match": 0.2,
+  "predictions_path": "eval_runs/mira25_kimi_local_full_20260413-174140/predictions.jsonl"
+}
