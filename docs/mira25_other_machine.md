@@ -82,6 +82,18 @@ export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 export OPENAI_MODEL="qwen/qwen3.6-plus"
 ```
 
+## Local Kimi K2.5 setup
+
+If the machine already hosts Kimi via a local vLLM server:
+
+```bash
+export OPENAI_API_KEY=local
+export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"
+export OPENAI_MODEL="kimi-k2.5-local"
+export OPENAI_REASONING_BACKEND="kimi_k2"
+export VLM_RUNTIME=podman
+```
+
 ## Run the 25-case eval
 
 ```bash

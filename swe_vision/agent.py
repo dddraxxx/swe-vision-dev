@@ -89,6 +89,8 @@ class VLMToolCallAgent:
                 return "qwen3"
             if "gemma-4" in model_lower:
                 return "gemma4"
+            if "kimi" in model_lower:
+                return "kimi_k2"
             return "openai"
         return reasoning_backend
 
@@ -233,6 +235,11 @@ class VLMToolCallAgent:
                 }
             elif reasoning_backend == "qwen3":
                 kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": True}}
+            elif reasoning_backend == "kimi_k2":
+                # Kimi K2.5 on vLLM nightly emits assistant reasoning by default.
+                # Avoid OpenAI-specific reasoning payloads that local vLLM parsers do
+                # not need and may reject as the schema evolves.
+                pass
             else:
                 kwargs["extra_body"] = {"reasoning": {"enabled": True, "effort": "xhigh"}}
                 kwargs["reasoning_effort"] = "xhigh"
@@ -244,6 +251,8 @@ class VLMToolCallAgent:
                 }
             elif reasoning_backend == "qwen3":
                 kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+            elif reasoning_backend == "kimi_k2":
+                kwargs["extra_body"] = {"chat_template_kwargs": {"thinking": False}}
             else:
                 kwargs["extra_body"] = {"reasoning": {"enabled": False, "effort": "minimal"}}
 
@@ -254,7 +263,7 @@ class VLMToolCallAgent:
         await self._ensure_kernel()
         await self._prime_uploaded_image_vars()
 
-        self._log("Executing code in Docker Jupyter notebook:\n%s",
+        self._log("Executing code in notebook runtime:\n%s",
                    code[:200] + ("..." if len(code) > 200 else ""))
 
         result = await self.kernel.execute(code)

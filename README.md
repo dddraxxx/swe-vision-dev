@@ -58,7 +58,7 @@ export OPENAI_BASE_URL="https://openrouter.ai/api/v1"   # custom API endpoint
 export OPENAI_MODEL="openai/gpt-5.2"                          # default model
 export VLM_RUNTIME="local_sandbox"                            # default / recommended here
 export VLM_ATTACH_IMAGES_TO_LLM="true"                        # set false for text-only host models
-export OPENAI_REASONING_BACKEND="auto"                        # auto/openai/qwen3
+export OPENAI_REASONING_BACKEND="auto"                        # auto/openai/qwen3/gemma4/kimi_k2
 ```
 
 ### 3. Prepare the runtime
@@ -209,6 +209,37 @@ Useful checks:
 curl http://127.0.0.1:8001/v1/models
 tail -f logs/gemma4_host_vllm.log
 tmux attach -t swevision-gemma4
+```
+
+### Kimi K2.5 + local vLLM setup
+
+When using the local Kimi host from `/mnt/localssd/kimi-k2.5-local`, keep the
+model API local and run notebook tool execution in Podman:
+
+```bash
+export OPENAI_API_KEY=local
+export OPENAI_BASE_URL=http://127.0.0.1:8000/v1
+export OPENAI_MODEL=kimi-k2.5-local
+export OPENAI_REASONING_BACKEND=kimi_k2
+export VLM_ATTACH_IMAGES_TO_LLM=true
+export VLM_RUNTIME=podman
+export VLM_HOST_WORK_DIR=/mnt/localssd/tmp/vlm_docker_workdir
+export VLM_PODMAN_ROOT=/mnt/localssd/podman-root
+export VLM_PODMAN_RUNROOT=/mnt/localssd/podman-runroot
+```
+
+Build the runtime image once:
+
+```bash
+sudo podman --root "$VLM_PODMAN_ROOT" --runroot "$VLM_PODMAN_RUNROOT" \
+  build --isolation=chroot -t swe-vision:latest ./env
+```
+
+Then use the Kimi helper scripts:
+
+```bash
+bash scripts/smoke_kimi_local.sh
+bash scripts/run_mira25_kimi_local.sh --max-items 1
 ```
 
 
