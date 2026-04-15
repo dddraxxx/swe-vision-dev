@@ -507,17 +507,27 @@ VIEW_TEMPLATE = r"""
             <div class="reasoning-content">{{ step.reasoning }}</div>
           </div>
         {% elif step.reasoning_details %}
-          {% for rd in step.reasoning_details %}
-            {% if rd.type == 'reasoning.summary' and rd.summary %}
-              <div class="reasoning-block open">
-                <div class="reasoning-header" onclick="this.parentElement.classList.toggle('open')">
-                  <span class="reasoning-toggle">▸</span>
-                  <span>💭 Reasoning</span>
-                </div>
-                <div class="reasoning-content">{{ rd.summary }}</div>
+          {% if step.reasoning_details is string %}
+            <div class="reasoning-block open">
+              <div class="reasoning-header" onclick="this.parentElement.classList.toggle('open')">
+                <span class="reasoning-toggle">▸</span>
+                <span>💭 Reasoning</span>
               </div>
-            {% endif %}
-          {% endfor %}
+              <div class="reasoning-content">{{ step.reasoning_details }}</div>
+            </div>
+          {% else %}
+            {% for rd in step.reasoning_details %}
+              {% if rd.type == 'reasoning.summary' and rd.summary %}
+                <div class="reasoning-block open">
+                  <div class="reasoning-header" onclick="this.parentElement.classList.toggle('open')">
+                    <span class="reasoning-toggle">▸</span>
+                    <span>💭 Reasoning</span>
+                  </div>
+                  <div class="reasoning-content">{{ rd.summary }}</div>
+                </div>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
         {% endif %}
 
         {# ─── Tool calls ─── #}
