@@ -242,6 +242,46 @@ bash scripts/smoke_kimi_local.sh
 bash scripts/run_mira25_kimi_local.sh --max-items 1
 ```
 
+### Qwen3.5 + local vLLM eval helpers
+
+When the local Qwen vLLM host is already serving on `http://127.0.0.1:8001/v1`,
+use the served model id and keep the notebook runtime in Podman:
+
+```bash
+export OPENAI_API_KEY=local
+export OPENAI_BASE_URL=http://127.0.0.1:8001/v1
+export OPENAI_MODEL=qwen3.5-local
+export OPENAI_REASONING_BACKEND=qwen3
+export VLM_ATTACH_IMAGES_TO_LLM=true
+export VLM_RUNTIME=podman
+export VLM_HOST_WORK_DIR=/mnt/localssd/tmp/vlm_docker_workdir
+export VLM_PODMAN_ROOT=/mnt/localssd/podman-root
+export VLM_PODMAN_RUNROOT=/mnt/localssd/podman-runroot
+```
+
+Quick checks:
+
+```bash
+curl http://127.0.0.1:8001/v1/models
+tail -f logs/*-smoke-qwen-local.log
+```
+
+Use the local Qwen helper scripts:
+
+```bash
+bash scripts/smoke_qwen_local.sh
+bash scripts/run_mira25_qwen_local.sh --max-items 1
+```
+
+For the first full MIRA25 run, keep the wrapper default of `CONCURRENCY=1`.
+Only raise concurrency after validating stability on this host.
+
+Directory conventions for these helpers:
+- wrappers live in `scripts/`
+- one-off smoke and eval logs live in `logs/`
+- eval outputs live in `eval_runs/`
+- agent trajectories live in `trajectories/`
+
 
 ### 4. Run the agent (CLI)
 
@@ -294,6 +334,12 @@ cd /mnt/localssd/swe-vision
 source .venv/bin/activate
 python scripts/eval_jsonl.py --input eval_examples/test_image_eval.jsonl --output-dir eval_runs/sample
 ```
+
+When the run has a known reference answer, include it in the saved trajectory
+metadata when feasible. In practice, prefer storing both `eval_id` and
+`ground_truth` for eval rows so the trajectory viewer and any later debugging
+stay self-contained even if the original JSONL is not nearby. The bundled eval
+runner already does this for batch evals.
 
 For the 25-case MIRA recipe on a fresh machine, see
 [`docs/mira25_other_machine.md`](./docs/mira25_other_machine.md).

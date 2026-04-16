@@ -902,6 +902,8 @@ def load_mira_ground_truth_index() -> dict:
 def lookup_ground_truth(meta: dict) -> str | None:
     if not meta:
         return None
+    if meta.get("ground_truth") is not None:
+        return str(meta["ground_truth"])
     index = load_mira_ground_truth_index()
     image_paths = meta.get("image_paths") or []
     for image_path in image_paths:

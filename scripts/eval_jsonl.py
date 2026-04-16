@@ -54,10 +54,15 @@ async def run_row(args: argparse.Namespace, row: dict, base_dir: Path) -> dict:
         agent_kwargs["model"] = args.model
 
     agent = VLMToolCallAgent(**agent_kwargs)
+    ground_truth = str(row.get("answer", "")).strip()
     try:
         answer = await agent.run(
             row["question"],
             normalize_image_paths(row, base_dir),
+            trajectory_metadata={
+                "eval_id": row["id"],
+                "ground_truth": ground_truth,
+            },
         )
         prediction = str(answer).strip()
         error = None
@@ -67,7 +72,6 @@ async def run_row(args: argparse.Namespace, row: dict, base_dir: Path) -> dict:
     finally:
         await agent.cleanup()
 
-    ground_truth = str(row.get("answer", "")).strip()
     record = {
         "id": row["id"],
         "question": row["question"],

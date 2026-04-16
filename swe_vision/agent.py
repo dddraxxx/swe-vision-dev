@@ -317,6 +317,14 @@ image_clue = images
         self._uploaded_image_vars_ready = True
 
     def _init_trajectory(self, query: str, image_paths: Optional[List[str]]) -> TrajectoryRecorder:
+        return self._init_trajectory_with_metadata(query, image_paths, None)
+
+    def _init_trajectory_with_metadata(
+        self,
+        query: str,
+        image_paths: Optional[List[str]],
+        extra_metadata: Optional[Dict[str, Any]],
+    ) -> TrajectoryRecorder:
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         if self._save_trajectory_dir:
             save_dir = f"{self._save_trajectory_dir}_{ts}"
@@ -331,19 +339,26 @@ image_clue = images
             max_iterations=self.max_iterations,
             system_prompt=self.system_prompt,
         )
+        if extra_metadata:
+            recorder.set_metadata(**extra_metadata)
         return recorder
 
     async def run(
         self,
         query: str,
         image_paths: Optional[List[str]] = None,
+        trajectory_metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Run the agentic loop for a single user query.
 
         Returns the final answer string.
         """
-        self.trajectory = self._init_trajectory(query, image_paths)
+        self.trajectory = self._init_trajectory_with_metadata(
+            query,
+            image_paths,
+            trajectory_metadata,
+        )
         self._current_uploaded_file_paths = []
         self._uploaded_image_vars_ready = False
 

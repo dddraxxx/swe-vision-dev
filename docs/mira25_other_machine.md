@@ -94,6 +94,31 @@ export OPENAI_REASONING_BACKEND="kimi_k2"
 export VLM_RUNTIME=podman
 ```
 
+## Local Qwen 3.5 setup
+
+If the machine already hosts Qwen via a local vLLM server:
+
+```bash
+export OPENAI_API_KEY=local
+export OPENAI_BASE_URL="http://127.0.0.1:8001/v1"
+export OPENAI_MODEL="qwen3.5-local"
+export OPENAI_REASONING_BACKEND="qwen3"
+export VLM_RUNTIME=podman
+```
+
+The repo-local helpers keep the directory layout clean:
+
+- wrappers in `scripts/`
+- logs in `logs/`
+- eval outputs in `eval_runs/`
+- trajectories in `trajectories/`
+
+Smoke-test the full notebook/tool loop:
+
+```bash
+bash scripts/smoke_qwen_local.sh
+```
+
 ## Run the 25-case eval
 
 ```bash
@@ -106,11 +131,21 @@ python scripts/eval_jsonl.py \
   --concurrency 4
 ```
 
+For the local Qwen host, prefer the helper wrapper and start with conservative
+parallelism:
+
+```bash
+bash scripts/run_mira25_qwen_local.sh --max-items 1
+CONCURRENCY=1 bash scripts/run_mira25_qwen_local.sh
+```
+
 ## Notes
 
 - `--concurrency 4` was stable on the original machine.
 - `--concurrency 25` launched all cases but stalled workers and left many
   long-lived containers, so it is not the recommended setting.
+- For the first local Qwen run on a new host, start with `CONCURRENCY=1` and
+  only increase it after a clean smoke test and a small eval pass.
 - The eval runner is resumable. Re-run the same command with the same
   `--output-dir` and it skips any rows already written to `predictions.jsonl`.
 
