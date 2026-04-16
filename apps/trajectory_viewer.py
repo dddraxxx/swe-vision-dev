@@ -381,6 +381,25 @@ VIEW_TEMPLATE = r"""
   .reasoning-block.open .reasoning-content { display: block; }
   .reasoning-block .reasoning-toggle { transition: transform 0.2s; font-size: 14px; }
   .reasoning-block.open .reasoning-toggle { transform: rotate(90deg); }
+
+  .floating-actions {
+    position: fixed; right: 20px; bottom: 20px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .floating-button {
+    background: rgba(88,166,255,0.95); color: #fff; border: 1px solid rgba(88,166,255,0.7);
+    border-radius: 999px; padding: 10px 14px; font-size: 12px; font-weight: 700;
+    cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .floating-button.secondary {
+    background: rgba(22,27,34,0.95); color: var(--text); border-color: var(--border);
+  }
+  .floating-button:hover { filter: brightness(1.06); }
+
+  @media (max-width: 640px) {
+    .floating-actions { right: 14px; bottom: 14px; }
+    .floating-button { padding: 9px 12px; font-size: 11px; }
+  }
 </style>
 </head>
 <body>
@@ -587,6 +606,11 @@ VIEW_TEMPLATE = r"""
   </div>
 </div>
 
+<div class="floating-actions">
+  <button class="floating-button" type="button" onclick="expandImageSteps()">Expand Image Cells</button>
+  <button class="floating-button secondary" type="button" onclick="collapseImageSteps()">Collapse Image Cells</button>
+</div>
+
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <img id="lightbox-img" src="" alt="zoom">
@@ -602,6 +626,15 @@ function openLightbox(src) {
 }
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('active');
+}
+function imageSteps() {
+  return Array.from(document.querySelectorAll('.step')).filter(step => step.querySelector('.image-gallery'));
+}
+function expandImageSteps() {
+  imageSteps().forEach(step => step.classList.add('open'));
+}
+function collapseImageSteps() {
+  imageSteps().forEach(step => step.classList.remove('open'));
 }
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeLightbox();
