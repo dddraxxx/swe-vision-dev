@@ -1,0 +1,452 @@
+[
+  {
+    "id": "gear_rotation-uid1.2",
+    "task": "gear_rotation",
+    "uid": 1.2,
+    "question": "If the first gear in the image rotates slightly in the direction opposite to the arrow, will the arrow on the final gear point to 1 or 2? Please answer with a number.",
+    "answer": "1",
+    "image_repo_path": "gear_rotation/image/1.png",
+    "local_image": "images/gear_rotation_uid1.2.png"
+  },
+  {
+    "id": "localizer-uid2",
+    "task": "localizer",
+    "uid": 2,
+    "question": "Tile the square on the right using the solid-outlined puzzle pieces on the left. Use all pieces; the final tiling must be exact\u2014no leftovers, no gaps, and no overlaps. Each piece has a circle. After completing the tiling, return the coordinates of each circle in numerical order, using the format: [piece ID (e.g., 1), (x, y)]; separate entries with semicolons.",
+    "answer": "[1, (1,1)]; [2, (2,4)]; [3, (1,7)]; [4, (6,4)]",
+    "image_repo_path": "localizer/image/2.png",
+    "local_image": "images/localizer_uid2.png"
+  },
+  {
+    "id": "mirror_clock-uid1",
+    "task": "mirror_clock",
+    "uid": 1,
+    "question": "This is what a clock looks like in a mirror. What time will it be in 1 hours and 40 minutes?",
+    "answer": "8:00",
+    "image_repo_path": "mirror_clock/image/1.png",
+    "local_image": "images/mirror_clock_uid1.png"
+  },
+  {
+    "id": "mirror_pattern-uid1",
+    "task": "mirror_pattern",
+    "uid": 1,
+    "question": "Which option can be obtained by mirroring the original image once?",
+    "answer": "C",
+    "image_repo_path": "mirror_pattern/image/1.png",
+    "local_image": "images/mirror_pattern_uid1.png"
+  },
+  {
+    "id": "multi_piece_puzzle-uid2",
+    "task": "multi_piece_puzzle",
+    "uid": 2,
+    "question": "Which three of the nine pieces on the right can be combined to exactly match the shape on the left? Please list the three piece numbers (comma\u2011separated, ascending order).",
+    "answer": "1,3,9",
+    "image_repo_path": "multi_piece_puzzle/image/2.png",
+    "local_image": "images/multi_piece_puzzle_uid2.png"
+  },
+  {
+    "id": "overlap-uid1",
+    "task": "overlap",
+    "uid": 1,
+    "question": "Choose two images from the four images A-D and overlay them according to the black coordinate axis borders of each image. This will produce the overlapping portion of the shapes in the image. Which combination has the largest overlapping area? Output only two letters to represent the combination, such as 'AC'.",
+    "answer": "AC",
+    "image_repo_path": "overlap/image/1.png",
+    "local_image": "images/overlap_uid1.png"
+  },
+  {
+    "id": "paper_airplane-uid2",
+    "task": "paper_airplane",
+    "uid": 2,
+    "question": "Based on the partial folding steps shown at the top of the image (ordered from left to right, top to bottom), can you infer which of the paper airplanes below is the final result?",
+    "answer": "C",
+    "image_repo_path": "paper_airplane/image/2.png",
+    "local_image": "images/paper_airplane_uid2.png"
+  },
+  {
+    "id": "puzzle-uid2",
+    "task": "puzzle",
+    "uid": 2,
+    "question": "Given the object above. There is a missing piece in the white area. Which of the five pieces (A, B, C, D, or E) fits perfectly into the missing part of the object?",
+    "answer": "C",
+    "image_repo_path": "puzzle/image/puzzle2.jpg",
+    "local_image": "images/puzzle_uid2.jpg"
+  },
+  {
+    "id": "rolling_dice_sum-uid2",
+    "task": "rolling_dice_sum",
+    "uid": 2,
+    "question": "If the die is rolled along the shown path, what is the total sum of the numbers on the bottom face that touches the path at each step?",
+    "answer": "14",
+    "image_repo_path": "rolling_dice_sum/image/2.png",
+    "local_image": "images/rolling_dice_sum_uid2.png"
+  },
+  {
+    "id": "rolling_dice_top-uid2",
+    "task": "rolling_dice_top",
+    "uid": 2,
+    "question": "If the dice is rolled on the showed path, what will be the number on the top?",
+    "answer": "6",
+    "image_repo_path": "rolling_dice_top/image/2.png",
+    "local_image": "images/rolling_dice_top_uid2.png"
+  },
+  {
+    "id": "trailer_cubes_count-uid2",
+    "task": "trailer_cubes_count",
+    "uid": 2,
+    "question": "Based on the three views, what's the maximum number of cubes that could be present?",
+    "answer": "33",
+    "image_repo_path": "trailer_cubes_count/image/2.jpg",
+    "local_image": "images/trailer_cubes_count_uid2.jpg"
+  },
+  {
+    "id": "trailer_cubes_missing-uid2",
+    "task": "trailer_cubes_missing",
+    "uid": 2,
+    "question": "Given the three views, what is the minimum number of cubes needed to fill in the structure so that it becomes a solid block with no internal gaps?",
+    "answer": "17",
+    "image_repo_path": "trailer_cubes_missing/image/2.jpg",
+    "local_image": "images/trailer_cubes_missing_uid2.jpg"
+  },
+  {
+    "id": "unfolded_cube-uid1",
+    "task": "unfolded_cube",
+    "uid": 1,
+    "question": "Given three different perspectives of a cube (top left, top right, and bottom left in the left image) and the patterns on its six faces (bottom right in the left image), please fill in the corresponding patterns in its unfolded view (right image). Note that only the outer surface of the cube has patterns; the inner surface does not. That is, the unfolded view on the right represents the outer surface of the cube. The six patterns are represented by 'heart, 'circle,' 'moon,' 'arrow,' 'triangle,' and 'star,' respectively. The output format is '(number, shape),' with different correspondences separated by semicolons.",
+    "answer": "(1, triangle); (2, star); (3, circle); (4, arrow); (5, moon)",
+    "image_repo_path": "unfolded_cube/image/1.png",
+    "local_image": "images/unfolded_cube_uid1.png"
+  },
+  {
+    "id": "billiards-uid3",
+    "task": "billiards",
+    "uid": 3,
+    "question": "In the image, a billiards table is shown with its pockets numbered 1\u202f\u2013\u202f6 in red. If the blue ball rolls in the direction indicated by the green arrow\u2014without spin and with unlimited momentum\u2014and is guaranteed to drop into a pocket, which pocket will it enter? Please answer with the single digit 1\u202f\u2013\u202f6.",
+    "answer": "5",
+    "image_repo_path": "billiards/image/3.png",
+    "local_image": "images/billiards_uid3.png"
+  },
+  {
+    "id": "convex_hull-uid2",
+    "task": "convex_hull",
+    "uid": 2,
+    "question": "Given 10 blue points, they form a blue convex hull. Given 10 green points, they form a green convex hull. How many red points fall in the overlapping portion of the blue and green convex hulls? Answer with only one digit.",
+    "answer": "6",
+    "image_repo_path": "convex_hull/image/2.png",
+    "local_image": "images/convex_hull_uid2.png"
+  },
+  {
+    "id": "cubes_count-uid3",
+    "task": "cubes_count",
+    "uid": 3,
+    "question": "What's the number of cubes presented in the image?",
+    "answer": "44",
+    "image_repo_path": "cubes_count/image/3.png",
+    "local_image": "images/cubes_count_uid3.png"
+  },
+  {
+    "id": "cubes_missing-uid3",
+    "task": "cubes_missing",
+    "uid": 3,
+    "question": "What is the number of cubes needed to fill in the structure so that it becomes a solid block with no internal gaps?",
+    "answer": "31",
+    "image_repo_path": "cubes_missing/image/3.png",
+    "local_image": "images/cubes_missing_uid3.png"
+  },
+  {
+    "id": "defuse_a_bomb-uid3",
+    "task": "defuse_a_bomb",
+    "uid": 3,
+    "question": "Bomb in a Box \u2014 which wire will you cut to defuse it? You can\u2019t open the box or see beneath the metal slats, and the wires only change direction where they\u2019re visible.",
+    "answer": "B",
+    "image_repo_path": "defuse_a_bomb/image/3.png",
+    "local_image": "images/defuse_a_bomb_uid3.png"
+  },
+  {
+    "id": "electric_charge-uid3",
+    "task": "electric_charge",
+    "uid": 3,
+    "question": "Analyze the forces acting on the topmost positive charge (+Q) and indicate the direction of the net force on it. Note: the size of each sphere does not represent the charge magnitude; use the label inside each sphere to determine its charge.",
+    "answer": "C",
+    "image_repo_path": "electric_charge/image/3.png",
+    "local_image": "images/electric_charge_uid3.png"
+  },
+  {
+    "id": "gear_rotation-uid2.1",
+    "task": "gear_rotation",
+    "uid": 2.1,
+    "question": "If the first gear in the image rotates slightly in the direction of the arrow, will the arrow on the final gear point to 1 or 2? Please answer with a number.",
+    "answer": "2",
+    "image_repo_path": "gear_rotation/image/2.png",
+    "local_image": "images/gear_rotation_uid2.1.png"
+  },
+  {
+    "id": "localizer-uid3",
+    "task": "localizer",
+    "uid": 3,
+    "question": "Tile the square on the right using the solid-outlined puzzle pieces on the left. Use all pieces; the final tiling must be exact\u2014no leftovers, no gaps, and no overlaps. Each piece has a circle. After completing the tiling, return the coordinates of each circle in numerical order, using the format: [piece ID (e.g., 1), (x, y)]; separate entries with semicolons.",
+    "answer": "[1, (1,1)]; [2, (2,3)]; [3, (1,6)]; [4, (6,4)]",
+    "image_repo_path": "localizer/image/3.png",
+    "local_image": "images/localizer_uid3.png"
+  },
+  {
+    "id": "mirror_clock-uid2",
+    "task": "mirror_clock",
+    "uid": 2,
+    "question": "This is what a clock looks like in a mirror. What time will it be in 8 hours and 10 minutes?",
+    "answer": "3:20",
+    "image_repo_path": "mirror_clock/image/2.png",
+    "local_image": "images/mirror_clock_uid2.png"
+  },
+  {
+    "id": "mirror_pattern-uid2",
+    "task": "mirror_pattern",
+    "uid": 2,
+    "question": "Which option can be obtained by mirroring the original image once?",
+    "answer": "A",
+    "image_repo_path": "mirror_pattern/image/2.png",
+    "local_image": "images/mirror_pattern_uid2.png"
+  },
+  {
+    "id": "multi_piece_puzzle-uid3",
+    "task": "multi_piece_puzzle",
+    "uid": 3,
+    "question": "Which three of the nine pieces on the right can be combined to exactly match the shape on the left? Please list the three piece numbers (comma\u2011separated, ascending order).",
+    "answer": "2,4,5",
+    "image_repo_path": "multi_piece_puzzle/image/3.png",
+    "local_image": "images/multi_piece_puzzle_uid3.png"
+  },
+  {
+    "id": "overlap-uid2",
+    "task": "overlap",
+    "uid": 2,
+    "question": "Choose two images from the four images A-D and overlay them according to the black coordinate axis borders of each image. This will produce the overlapping portion of the shapes in the image. Which combination has the largest overlapping area? Output only two letters to represent the combination, such as 'AC'.",
+    "answer": "BC",
+    "image_repo_path": "overlap/image/2.png",
+    "local_image": "images/overlap_uid2.png"
+  },
+  {
+    "id": "paper_airplane-uid3",
+    "task": "paper_airplane",
+    "uid": 3,
+    "question": "Based on the partial folding steps shown at the top of the image (ordered from left to right, top to bottom), can you infer which of the paper airplanes below is the final result?",
+    "answer": "B",
+    "image_repo_path": "paper_airplane/image/3.png",
+    "local_image": "images/paper_airplane_uid3.png"
+  },
+  {
+    "id": "puzzle-uid3",
+    "task": "puzzle",
+    "uid": 3,
+    "question": "Given the object above. There is a missing piece in the white area. Which of the five pieces (A, B, C, D, or E) fits perfectly into the missing part of the object?",
+    "answer": "D",
+    "image_repo_path": "puzzle/image/puzzle3.jpg",
+    "local_image": "images/puzzle_uid3.jpg"
+  },
+  {
+    "id": "rolling_dice_sum-uid3",
+    "task": "rolling_dice_sum",
+    "uid": 3,
+    "question": "If the die is rolled along the shown path, what is the total sum of the numbers on the bottom face that touches the path at each step?",
+    "answer": "12",
+    "image_repo_path": "rolling_dice_sum/image/3.png",
+    "local_image": "images/rolling_dice_sum_uid3.png"
+  },
+  {
+    "id": "rolling_dice_top-uid3",
+    "task": "rolling_dice_top",
+    "uid": 3,
+    "question": "If the dice is rolled on the showed path, what will be the number on the top?",
+    "answer": "6",
+    "image_repo_path": "rolling_dice_top/image/3.png",
+    "local_image": "images/rolling_dice_top_uid3.png"
+  },
+  {
+    "id": "trailer_cubes_count-uid3",
+    "task": "trailer_cubes_count",
+    "uid": 3,
+    "question": "Based on the three views, what's the maximum number of cubes that could be present?",
+    "answer": "30",
+    "image_repo_path": "trailer_cubes_count/image/3.jpg",
+    "local_image": "images/trailer_cubes_count_uid3.jpg"
+  },
+  {
+    "id": "trailer_cubes_missing-uid3",
+    "task": "trailer_cubes_missing",
+    "uid": 3,
+    "question": "Given the three views, what is the minimum number of cubes needed to fill in the structure so that it becomes a solid block with no internal gaps?",
+    "answer": "31",
+    "image_repo_path": "trailer_cubes_missing/image/3.jpg",
+    "local_image": "images/trailer_cubes_missing_uid3.jpg"
+  },
+  {
+    "id": "unfolded_cube-uid2",
+    "task": "unfolded_cube",
+    "uid": 2,
+    "question": "Given three different perspectives of a cube (top left, top right, and bottom left in the left image) and the patterns on its six faces (bottom right in the left image), please fill in the corresponding patterns in its unfolded view (right image). Note that only the outer surface of the cube has patterns; the inner surface does not. That is, the unfolded view on the right represents the outer surface of the cube. The six patterns are represented by 'heart, 'circle,' 'moon,' 'arrow,' 'triangle,' and 'star,' respectively. The output format is '(number, shape),' with different correspondences separated by semicolons.",
+    "answer": "(1, circle); (2, heart); (3, star); (4, arrow); (5, moon)",
+    "image_repo_path": "unfolded_cube/image/2.png",
+    "local_image": "images/unfolded_cube_uid2.png"
+  },
+  {
+    "id": "billiards-uid4",
+    "task": "billiards",
+    "uid": 4,
+    "question": "In the image, a billiards table is shown with its pockets numbered 1\u202f\u2013\u202f6 in red. If the blue ball rolls in the direction indicated by the green arrow\u2014without spin and with unlimited momentum\u2014and is guaranteed to drop into a pocket, which pocket will it enter? Please answer with the single digit 1\u202f\u2013\u202f6.",
+    "answer": "6",
+    "image_repo_path": "billiards/image/4.png",
+    "local_image": "images/billiards_uid4.png"
+  },
+  {
+    "id": "convex_hull-uid3",
+    "task": "convex_hull",
+    "uid": 3,
+    "question": "Given 10 blue points, they form a blue convex hull. Given 10 green points, they form a green convex hull. How many red points fall in the overlapping portion of the blue and green convex hulls? Answer with only one digit.",
+    "answer": "3",
+    "image_repo_path": "convex_hull/image/3.png",
+    "local_image": "images/convex_hull_uid3.png"
+  },
+  {
+    "id": "cubes_count-uid4",
+    "task": "cubes_count",
+    "uid": 4,
+    "question": "What's the number of cubes presented in the image?",
+    "answer": "42",
+    "image_repo_path": "cubes_count/image/4.png",
+    "local_image": "images/cubes_count_uid4.png"
+  },
+  {
+    "id": "cubes_missing-uid4",
+    "task": "cubes_missing",
+    "uid": 4,
+    "question": "What is the number of cubes needed to fill in the structure so that it becomes a solid block with no internal gaps?",
+    "answer": "18",
+    "image_repo_path": "cubes_missing/image/4.png",
+    "local_image": "images/cubes_missing_uid4.png"
+  },
+  {
+    "id": "defuse_a_bomb-uid4",
+    "task": "defuse_a_bomb",
+    "uid": 4,
+    "question": "Bomb in a Box \u2014 which wire will you cut to defuse it? You can\u2019t open the box or see beneath the metal slats, and the wires only change direction where they\u2019re visible.",
+    "answer": "A",
+    "image_repo_path": "defuse_a_bomb/image/4.png",
+    "local_image": "images/defuse_a_bomb_uid4.png"
+  },
+  {
+    "id": "electric_charge-uid4",
+    "task": "electric_charge",
+    "uid": 4,
+    "question": "Analyze the forces acting on the topmost positive charge (+Q) and indicate the direction of the net force on it. Note: the size of each sphere does not represent the charge magnitude; use the label inside each sphere to determine its charge.",
+    "answer": "C",
+    "image_repo_path": "electric_charge/image/4.png",
+    "local_image": "images/electric_charge_uid4.png"
+  },
+  {
+    "id": "gear_rotation-uid2.2",
+    "task": "gear_rotation",
+    "uid": 2.2,
+    "question": "If the first gear in the image rotates slightly in the direction opposite to the arrow, will the arrow on the final gear point to 1 or 2? Please answer with a number.",
+    "answer": "1",
+    "image_repo_path": "gear_rotation/image/2.png",
+    "local_image": "images/gear_rotation_uid2.2.png"
+  },
+  {
+    "id": "localizer-uid4",
+    "task": "localizer",
+    "uid": 4,
+    "question": "Tile the square on the right using the solid-outlined puzzle pieces on the left. Use all pieces; the final tiling must be exact\u2014no leftovers, no gaps, and no overlaps. Each piece has a circle. After completing the tiling, return the coordinates of each circle in numerical order, using the format: [piece ID (e.g., 1), (x, y)]; separate entries with semicolons.",
+    "answer": "[1, (1,1)]; [2, (5,3)]; [3, (1,6)]; [4, (3,1)]; [5, (3,6)]",
+    "image_repo_path": "localizer/image/4.png",
+    "local_image": "images/localizer_uid4.png"
+  },
+  {
+    "id": "mirror_clock-uid3",
+    "task": "mirror_clock",
+    "uid": 3,
+    "question": "This is what a clock looks like in a mirror. What time will it be in 10 hours and 25 minutes?",
+    "answer": "4:00",
+    "image_repo_path": "mirror_clock/image/3.png",
+    "local_image": "images/mirror_clock_uid3.png"
+  },
+  {
+    "id": "mirror_pattern-uid3",
+    "task": "mirror_pattern",
+    "uid": 3,
+    "question": "Which option can be obtained by mirroring the original image once?",
+    "answer": "D",
+    "image_repo_path": "mirror_pattern/image/3.png",
+    "local_image": "images/mirror_pattern_uid3.png"
+  },
+  {
+    "id": "multi_piece_puzzle-uid4",
+    "task": "multi_piece_puzzle",
+    "uid": 4,
+    "question": "Which three of the nine pieces on the right can be combined to exactly match the shape on the left? Please list the three piece numbers (comma\u2011separated, ascending order).",
+    "answer": "5,6,7",
+    "image_repo_path": "multi_piece_puzzle/image/4.png",
+    "local_image": "images/multi_piece_puzzle_uid4.png"
+  },
+  {
+    "id": "overlap-uid3",
+    "task": "overlap",
+    "uid": 3,
+    "question": "Choose two images from the four images A-D and overlay them according to the black coordinate axis borders of each image. This will produce the overlapping portion of the shapes in the image. Which combination has the largest overlapping area? Output only two letters to represent the combination, such as 'AC'.",
+    "answer": "CD",
+    "image_repo_path": "overlap/image/3.png",
+    "local_image": "images/overlap_uid3.png"
+  },
+  {
+    "id": "paper_airplane-uid4",
+    "task": "paper_airplane",
+    "uid": 4,
+    "question": "Based on the partial folding steps shown at the top of the image (ordered from left to right, top to bottom), can you infer which of the paper airplanes below is the final result?",
+    "answer": "E",
+    "image_repo_path": "paper_airplane/image/4.png",
+    "local_image": "images/paper_airplane_uid4.png"
+  },
+  {
+    "id": "puzzle-uid4",
+    "task": "puzzle",
+    "uid": 4,
+    "question": "Given the object above. There is a missing piece in the white area. Which of the five pieces (A, B, C, D, or E) fits perfectly into the missing part of the object?",
+    "answer": "B",
+    "image_repo_path": "puzzle/image/puzzle4.jpg",
+    "local_image": "images/puzzle_uid4.jpg"
+  },
+  {
+    "id": "rolling_dice_sum-uid4",
+    "task": "rolling_dice_sum",
+    "uid": 4,
+    "question": "If the die is rolled along the shown path, what is the total sum of the numbers on the bottom face that touches the path at each step?",
+    "answer": "21",
+    "image_repo_path": "rolling_dice_sum/image/4.png",
+    "local_image": "images/rolling_dice_sum_uid4.png"
+  },
+  {
+    "id": "rolling_dice_top-uid4",
+    "task": "rolling_dice_top",
+    "uid": 4,
+    "question": "If the dice is rolled on the showed path, what will be the number on the top?",
+    "answer": "3",
+    "image_repo_path": "rolling_dice_top/image/4.png",
+    "local_image": "images/rolling_dice_top_uid4.png"
+  },
+  {
+    "id": "trailer_cubes_count-uid4",
+    "task": "trailer_cubes_count",
+    "uid": 4,
+    "question": "Based on the three views, what's the maximum number of cubes that could be present?",
+    "answer": "33",
+    "image_repo_path": "trailer_cubes_count/image/4.jpg",
+    "local_image": "images/trailer_cubes_count_uid4.jpg"
+  },
+  {
+    "id": "trailer_cubes_missing-uid4",
+    "task": "trailer_cubes_missing",
+    "uid": 4,
+    "question": "Given the three views, what is the minimum number of cubes needed to fill in the structure so that it becomes a solid block with no internal gaps?",
+    "answer": "18",
+    "image_repo_path": "trailer_cubes_missing/image/4.jpg",
+    "local_image": "images/trailer_cubes_missing_uid4.jpg"
+  }
+]

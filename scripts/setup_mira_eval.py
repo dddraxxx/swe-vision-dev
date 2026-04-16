@@ -18,6 +18,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--count", type=int, default=25)
     parser.add_argument(
+        "--skip",
+        type=int,
+        default=0,
+        help="Number of answer-bearing round-robin examples to skip before staging.",
+    )
+    parser.add_argument(
         "--strategy",
         choices=["round_robin"],
         default="round_robin",
@@ -106,11 +112,12 @@ def load_rows(task: str, token: str, files: list[str]) -> list[dict]:
 
 
 def build_round_robin_selection(
-    tasks: list[str], count: int, token: str, files: list[str]
+    tasks: list[str], count: int, skip: int, token: str, files: list[str]
 ) -> list[tuple[str, dict]]:
     task_rows = {task: load_rows(task, token, files) for task in tasks}
     positions = {task: 0 for task in tasks}
     selected: list[tuple[str, dict]] = []
+    seen = 0
 
     while len(selected) < count:
         made_progress = False
@@ -119,9 +126,14 @@ def build_round_robin_selection(
             rows = task_rows[task]
             if idx >= len(rows):
                 continue
-            selected.append((task, rows[idx]))
+            row = rows[idx]
             positions[task] += 1
             made_progress = True
+            if seen < skip:
+                seen += 1
+                continue
+            selected.append((task, row))
+            seen += 1
             if len(selected) >= count:
                 break
         if not made_progress:
@@ -197,13 +209,14 @@ def main() -> None:
     token = require_hf_token()
     files = repo_files(token)
     tasks = task_names(files)
-    selection = build_round_robin_selection(tasks, args.count, token, files)
+    selection = build_round_robin_selection(tasks, args.count, args.skip, token, files)
     stage_selection(args.output_dir, selection, token, files)
 
     summary = {
         "dataset": DATASET_REPO,
         "num_tasks": len(tasks),
         "num_examples": len(selection),
+        "skip": args.skip,
         "output_dir": str(args.output_dir),
         "input_jsonl": str(args.output_dir / "mira_eval.jsonl"),
     }

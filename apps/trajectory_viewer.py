@@ -103,6 +103,9 @@ INDEX_TEMPLATE = r"""
   }
   .badge-steps { background: rgba(63,185,80,0.15); color: var(--green); }
   .badge-images { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .badge-verdict-correct { background: rgba(63,185,80,0.18); color: var(--green); }
+  .badge-verdict-wrong { background: rgba(248,81,73,0.18); color: var(--red); }
+  .badge-verdict-unknown { background: rgba(255,255,255,0.08); color: var(--text-muted); }
 </style>
 </head>
 <body>
@@ -116,8 +119,11 @@ INDEX_TEMPLATE = r"""
       {% if selected_model %}
       <input type="hidden" name="model" value="{{ selected_model }}">
       {% endif %}
+      {% if selected_verdict %}
+      <input type="hidden" name="verdict" value="{{ selected_verdict }}">
+      {% endif %}
       <button class="chip active" type="submit">Apply</button>
-      {% if selected_model or search_query %}
+      {% if selected_model or selected_verdict or search_query %}
       <a class="clear-link" href="/">Clear filters</a>
       {% endif %}
     </form>
@@ -127,9 +133,21 @@ INDEX_TEMPLATE = r"""
         <span class="chip-count">{{ total_runs }}</span>
       </a>
       {% for model_item in model_filters %}
-      <a href="/?model={{ model_item.name|urlencode }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="chip {% if selected_model == model_item.name %}active{% endif %}">
+      <a href="/?model={{ model_item.name|urlencode }}{% if selected_verdict %}&verdict={{ selected_verdict|urlencode }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="chip {% if selected_model == model_item.name %}active{% endif %}">
         {{ model_item.name }}
         <span class="chip-count">{{ model_item.count }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    <div class="chips" style="margin-top:10px;">
+      <a href="/{% if selected_model or search_query %}?{% if selected_model %}model={{ selected_model|urlencode }}{% endif %}{% if selected_model and search_query %}&{% endif %}{% if search_query %}q={{ search_query|urlencode }}{% endif %}{% endif %}" class="chip {% if not selected_verdict %}active{% endif %}">
+        All Verdicts
+        <span class="chip-count">{{ total_runs }}</span>
+      </a>
+      {% for verdict_item in verdict_filters %}
+      <a href="/?verdict={{ verdict_item.name|urlencode }}{% if selected_model %}&model={{ selected_model|urlencode }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="chip {% if selected_verdict == verdict_item.name %}active{% endif %}">
+        {{ verdict_item.label }}
+        <span class="chip-count">{{ verdict_item.count }}</span>
       </a>
       {% endfor %}
     </div>
@@ -149,12 +167,16 @@ INDEX_TEMPLATE = r"""
             {% if run.image_count > 0 %}
             <span class="badge badge-images">{{ run.image_count }} images</span>
             {% endif %}
+            <span class="badge badge-verdict-{{ run.manual_verdict }}">{{ run.manual_verdict_label }}</span>
           </h3>
           <p>{{ run.query[:120] }}{% if run.query|length > 120 %}…{% endif %}</p>
           {% if run.final_answer %}
           <p style="margin-top:4px;color:var(--green);">✓ {{ run.final_answer[:100] }}{% if run.final_answer|length > 100 %}…{% endif %}</p>
           {% endif %}
           <p style="margin-top:4px;color:var(--yellow);">GT: {{ run.ground_truth if run.ground_truth is not none else 'None' }}</p>
+          {% if run.manual_note %}
+          <p style="margin-top:4px;color:var(--text-muted);">{{ run.manual_note }}</p>
+          {% endif %}
         </div>
         <div class="meta">
           <div class="model">{{ run.model }}</div>
@@ -452,7 +474,17 @@ VIEW_TEMPLATE = r"""
       <div class="label">Ground Truth</div>
       <div class="value">{{ ground_truth if ground_truth is not none else 'None' }}</div>
     </div>
+    <div class="meta-item">
+      <div class="label">Manual Verdict</div>
+      <div class="value">{{ manual_verdict_label }}</div>
+    </div>
   </div>
+  {% if manual_note %}
+  <div class="final-answer" style="margin-top:-10px;border-color:rgba(210,153,34,0.3);background:rgba(210,153,34,0.08);">
+    <div class="label" style="color:var(--yellow);">Manual Note</div>
+    <div class="text">{{ manual_note }}</div>
+  </div>
+  {% endif %}
 
   <!-- Timeline -->
   <div class="timeline">
@@ -932,6 +964,14 @@ def load_mira_ground_truth_index() -> dict:
     return {"by_image_key": by_image_key, "by_question": by_question}
 
 
+def verdict_label(verdict: str) -> str:
+    return {
+        "correct": "Manual: Correct",
+        "wrong": "Manual: Wrong",
+        "unknown": "Manual: Unknown",
+    }.get(verdict, "Manual: Unknown")
+
+
 def lookup_ground_truth(meta: dict) -> str | None:
     if not meta:
         return None
@@ -949,6 +989,19 @@ def lookup_ground_truth(meta: dict) -> str | None:
     return None
 
 
+def lookup_manual_verdict(meta: dict) -> dict:
+    if not meta:
+        return {"verdict": "unknown", "label": verdict_label("unknown"), "note": None}
+    verdict = str(meta.get("manual_verdict") or "unknown").strip().lower()
+    if verdict not in {"correct", "wrong"}:
+        verdict = "unknown"
+    return {
+        "verdict": verdict,
+        "label": verdict_label(verdict),
+        "note": meta.get("manual_review_note"),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Routes
 # ─────────────────────────────────────────────────────────────────────
@@ -958,6 +1011,7 @@ def index():
     traj_dirs = find_trajectory_dirs(TRAJECTORIES_ROOT)
     runs = []
     selected_model = (request.args.get("model") or "").strip()
+    selected_verdict = (request.args.get("verdict") or "").strip().lower()
     search_query = (request.args.get("q") or "").strip()
     search_lower = search_query.lower()
     for d in traj_dirs:
@@ -968,6 +1022,7 @@ def index():
                 data = load_trajectory(d)
                 meta = data.get("metadata", {})
                 ground_truth = lookup_ground_truth(meta)
+                manual = lookup_manual_verdict(meta)
                 runs.append({
                     "name": rel_name,
                     "query": meta.get("query", "(no query)"),
@@ -977,6 +1032,9 @@ def index():
                     "final_answer": data.get("final_answer"),
                     "image_count": count_images(d),
                     "ground_truth": ground_truth,
+                    "manual_verdict": manual["verdict"],
+                    "manual_verdict_label": manual["label"],
+                    "manual_note": manual["note"],
                 })
             elif fmt == "raw":
                 messages = load_raw_messages(d)
@@ -990,14 +1048,20 @@ def index():
                     "final_answer": final_answer,
                     "image_count": count_images(d),
                     "ground_truth": None,
+                    "manual_verdict": "unknown",
+                    "manual_verdict_label": verdict_label("unknown"),
+                    "manual_note": None,
                 })
         except Exception:
             continue
 
     model_counts = Counter(run["model"] for run in runs)
+    verdict_counts = Counter(run["manual_verdict"] for run in runs)
 
     if selected_model:
         runs = [run for run in runs if run["model"] == selected_model]
+    if selected_verdict:
+        runs = [run for run in runs if run["manual_verdict"] == selected_verdict]
     if search_lower:
         runs = [
             run for run in runs
@@ -1005,6 +1069,7 @@ def index():
             or search_lower in (run["query"] or "").lower()
             or search_lower in (run["final_answer"] or "").lower()
             or search_lower in (run["model"] or "").lower()
+            or search_lower in (run["manual_verdict_label"] or "").lower()
         ]
 
     grouped = defaultdict(list)
@@ -1019,13 +1084,20 @@ def index():
         {"name": model, "count": count}
         for model, count in sorted(model_counts.items(), key=lambda item: (-item[1], item[0].lower()))
     ]
+    verdict_filters = [
+        {"name": verdict, "count": verdict_counts.get(verdict, 0), "label": verdict_label(verdict)}
+        for verdict in ("correct", "wrong", "unknown")
+        if verdict_counts.get(verdict, 0) > 0
+    ]
 
     return render_template_string(
         INDEX_TEMPLATE,
         run_groups=run_groups,
         root=TRAJECTORIES_ROOT,
         model_filters=model_filters,
+        verdict_filters=verdict_filters,
         selected_model=selected_model,
+        selected_verdict=selected_verdict,
         search_query=search_query,
         total_runs=sum(model_counts.values()),
     )
@@ -1064,6 +1136,11 @@ def view_trajectory(run_name: str):
 
     img_count = count_images(traj_dir)
     ground_truth = lookup_ground_truth(meta) if isinstance(meta, dict) else None
+    manual = lookup_manual_verdict(meta) if isinstance(meta, dict) else {
+        "verdict": "unknown",
+        "label": verdict_label("unknown"),
+        "note": None,
+    }
 
     return render_template_string(
         VIEW_TEMPLATE,
@@ -1071,6 +1148,9 @@ def view_trajectory(run_name: str):
         steps=steps,
         final_answer=final_answer,
         ground_truth=ground_truth,
+        manual_verdict=manual["verdict"],
+        manual_verdict_label=manual["label"],
+        manual_note=manual["note"],
         run_name=run_name,
         image_count=img_count,
         parse_args=parse_tool_args,

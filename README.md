@@ -344,6 +344,28 @@ runner already does this for batch evals.
 For the 25-case MIRA recipe on a fresh machine, see
 [`docs/mira25_other_machine.md`](./docs/mira25_other_machine.md).
 
+The repo also carries two committed MIRA eval bundles for repeated local testing:
+
+- [`eval_examples/mira25_mixed/mira_eval.jsonl`](./eval_examples/mira25_mixed/mira_eval.jsonl):
+  the first 25 answer-bearing round-robin examples from MIRA.
+- [`eval_examples/mira50_round2/mira_eval.jsonl`](./eval_examples/mira50_round2/mira_eval.jsonl):
+  the next 50 answer-bearing round-robin examples, with zero overlap against
+  `mira25_mixed`.
+
+The staging helper supports deterministic continuation:
+
+```bash
+export HF_TOKEN=...
+.venv/bin/python scripts/setup_mira_eval.py \
+  --output-dir eval_examples/mira50_round2 \
+  --count 50 \
+  --skip 25
+```
+
+`rolling_dice_two` is not included in either committed bundle because its
+current upstream rows have null `answer` values, and the staging rule keeps
+only answer-bearing examples.
+
 ### 7. View trajectories
 
 Every agent run saves a trajectory (JSON + images) to `./trajectories/`. Browse them with the viewer:

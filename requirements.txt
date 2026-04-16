@@ -13,3 +13,4 @@ Pillow
 
 # Evaluation utilities
 regex
+huggingface_hub
